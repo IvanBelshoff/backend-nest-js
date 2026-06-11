@@ -10,7 +10,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { Request } from 'express';
-import { IS_PUBLIC_KEY } from 'src/shared/decorators/public';
+import { IS_PUBLIC_KEY } from 'src/shared/decorators/auth-public.decorator';
 
 @Injectable()
 export class AuthGuard implements CanActivate {

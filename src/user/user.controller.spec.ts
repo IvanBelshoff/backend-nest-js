@@ -3,6 +3,34 @@ import { IS_PUBLIC_KEY } from 'src/shared/decorators/public';
 import { UsersController } from './user.controller';
 
 describe('UsersController', () => {
+  it('passes the uploaded photo to the create service method', async () => {
+    const usersService = {
+      create: jest.fn().mockResolvedValue({
+        id: 1,
+        nome: 'Ivan',
+        email: 'ivan@example.com',
+      }),
+    };
+    const controller = new UsersController(usersService as any);
+    const dto = {
+      nome: 'Ivan',
+      sobrenome: 'Belshoff',
+      email: 'ivan@example.com',
+      senha: 'senha-segura',
+    };
+    const foto = {
+      filename: 'foto-gerada.png',
+      originalname: 'perfil.png',
+      mimetype: 'image/png',
+      size: 1024,
+      path: 'C:\\uploads\\foto-gerada.png',
+    } as Express.Multer.File;
+
+    await controller.create(dto, foto);
+
+    expect(usersService.create).toHaveBeenCalledWith(dto, foto);
+  });
+
   it('marks the user photo route as public', () => {
     const metadata = Reflect.getMetadata(
       IS_PUBLIC_KEY,

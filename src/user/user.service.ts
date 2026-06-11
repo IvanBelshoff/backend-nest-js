@@ -3,7 +3,7 @@ import { Usuario } from 'src/database/entities/Usuarios';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { Foto } from 'src/database/entities/Fotos';
-import { existsSync, statSync } from 'fs';
+import { existsSync, statSync, unlinkSync } from 'fs';
 import { isAbsolute, join } from 'path';
 
 const SALT_ROUNDS = 10;
@@ -24,40 +24,43 @@ export class UsersService {
     return this.userRepository.find({ relations: { foto: true } });
   }
 
-  async create(user: Partial<Usuario>): Promise<Partial<Usuario>> {
-    const defaultPhotoPath = this.resolvePhotoPath(DEFAULT_PROFILE_PHOTO_LOCAL);
-    const defaultPhotoSize = statSync(defaultPhotoPath).size;
+  async create(
+    user: Partial<Usuario>,
+    foto?: Express.Multer.File,
+  ): Promise<Partial<Usuario>> {
+    try {
+      const createdUser = await this.userRepository.manager.transaction(
+        async (manager) => {
+          const userRepository = manager.getRepository(Usuario);
+          const fotoRepository = manager.getRepository(Foto);
 
-    const createdUser = await this.userRepository.manager.transaction(
-      async (manager) => {
-        const userRepository = manager.getRepository(Usuario);
-        const fotoRepository = manager.getRepository(Foto);
+          const newUser = userRepository.create({
+            ...user,
+            senha: user.senha
+              ? await bcrypt.hash(user.senha, SALT_ROUNDS)
+              : user.senha,
+          });
 
-        const newUser = userRepository.create({
-          ...user,
-          senha: user.senha
-            ? await bcrypt.hash(user.senha, SALT_ROUNDS)
-            : user.senha,
-        });
+          const savedUser = await userRepository.save(newUser);
+          const userPhoto = this.fotoRepository.create(
+            this.buildPhotoData(savedUser.id, foto),
+          );
 
-        const savedUser = await userRepository.save(newUser);
-        const defaultPhoto = this.fotoRepository.create({
-          nome: DEFAULT_PROFILE_PHOTO_NAME,
-          originalname: DEFAULT_PROFILE_PHOTO_NAME,
-          tipo: DEFAULT_PROFILE_PHOTO_TYPE,
-          tamanho: defaultPhotoSize,
-          local: DEFAULT_PROFILE_PHOTO_LOCAL,
-          url: `/user/${savedUser.id}/foto`,
-        });
+          savedUser.foto = await fotoRepository.save(userPhoto);
 
-        savedUser.foto = await fotoRepository.save(defaultPhoto);
+          return userRepository.save(savedUser);
+        },
+      );
 
-        return userRepository.save(savedUser);
-      },
-    );
+      const { senha, ...userWithoutPassword } = createdUser;
+      return userWithoutPassword;
+    } catch (error) {
+      if (foto?.path && existsSync(foto.path)) {
+        unlinkSync(foto.path);
+      }
 
-    const { senha, ...userWithoutPassword } = createdUser;
-    return userWithoutPassword;
+      throw error;
+    }
   }
 
   async findOne(email: string): Promise<Usuario | undefined> {
@@ -93,5 +96,32 @@ export class UsersService {
 
   private resolvePhotoPath(local: string): string {
     return isAbsolute(local) ? local : join(__dirname, '..', local);
+  }
+
+  private buildPhotoData(
+    userId: number,
+    foto?: Express.Multer.File,
+  ): Partial<Foto> {
+    if (foto) {
+      return {
+        nome: foto.filename,
+        originalname: foto.originalname,
+        tipo: foto.mimetype,
+        tamanho: foto.size,
+        local: foto.path,
+        url: `/user/${userId}/foto`,
+      };
+    }
+
+    const defaultPhotoPath = this.resolvePhotoPath(DEFAULT_PROFILE_PHOTO_LOCAL);
+
+    return {
+      nome: DEFAULT_PROFILE_PHOTO_NAME,
+      originalname: DEFAULT_PROFILE_PHOTO_NAME,
+      tipo: DEFAULT_PROFILE_PHOTO_TYPE,
+      tamanho: statSync(defaultPhotoPath).size,
+      local: DEFAULT_PROFILE_PHOTO_LOCAL,
+      url: `/user/${userId}/foto`,
+    };
   }
 }

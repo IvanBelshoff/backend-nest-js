@@ -13,7 +13,7 @@ import { ZodValidation } from 'src/shared/decorators/zod-validation.decorator';
 import { signinSchema, type SigninDto } from './dtos/signin.dto';
 import { AuthGuard } from './auth.guard';
 import * as UserRequest from 'src/shared/interfaces/UserRequest';
-import { Public } from 'src/shared/decorators/public';
+import { Public } from 'src/shared/decorators/auth-public.decorator';
 
 @Controller('auth')
 export class AuthController {
