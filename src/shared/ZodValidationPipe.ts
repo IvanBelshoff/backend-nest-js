@@ -8,7 +8,7 @@ import * as zod from 'zod';
 
 @Injectable()
 export class ZodValidationPipe implements PipeTransform {
-  constructor(private readonly schema: zod.ZodSchema) { }
+  constructor(private readonly schema: zod.ZodSchema) {}
 
   transform(value: unknown, metadata: ArgumentMetadata) {
     if (metadata.type !== 'body') {

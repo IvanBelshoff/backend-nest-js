@@ -1,16 +1,12 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import 'dotenv/config';
 import { Usuario } from 'src/database/entities/Usuarios';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { Foto } from 'src/database/entities/Fotos';
 import { existsSync, statSync, unlinkSync } from 'fs';
 import { isAbsolute, join } from 'path';
-
-const SALT_ROUNDS = 10;
-const DEFAULT_PROFILE_PHOTO_NAME = 'profile.jpg';
-const DEFAULT_PROFILE_PHOTO_LOCAL = 'shared/data/default/profile.jpg';
-const DEFAULT_PROFILE_PHOTO_TYPE = 'image/jpeg';
-
+import { env } from '../shared/env.schema';
 @Injectable()
 export class UsersService {
   constructor(
@@ -26,9 +22,19 @@ export class UsersService {
 
   async create(
     user: Partial<Usuario>,
+    requester: {
+      sub: number;
+      email: string;
+      iat: number;
+      exp: number;
+    },
     foto?: Express.Multer.File,
   ): Promise<Partial<Usuario>> {
     try {
+      const requesterUser = await this.userRepository.findOne({
+        where: { id: requester.sub },
+      });
+
       const createdUser = await this.userRepository.manager.transaction(
         async (manager) => {
           const userRepository = manager.getRepository(Usuario);
@@ -36,8 +42,14 @@ export class UsersService {
 
           const newUser = userRepository.create({
             ...user,
+            usuario_atualizador: requesterUser
+              ? `${requesterUser.nome} ${requesterUser.sobrenome}`
+              : 'Sistema',
+            usuario_cadastrador: requesterUser
+              ? `${requesterUser.nome} ${requesterUser.sobrenome}`
+              : 'Sistema',
             senha: user.senha
-              ? await bcrypt.hash(user.senha, SALT_ROUNDS)
+              ? await bcrypt.hash(user.senha, env.SALT_ROUNDS)
               : user.senha,
           });
 
@@ -113,14 +125,16 @@ export class UsersService {
       };
     }
 
-    const defaultPhotoPath = this.resolvePhotoPath(DEFAULT_PROFILE_PHOTO_LOCAL);
+    const defaultPhotoPath = this.resolvePhotoPath(
+      env.DEFAULT_PROFILE_PHOTO_LOCAL,
+    );
 
     return {
-      nome: DEFAULT_PROFILE_PHOTO_NAME,
-      originalname: DEFAULT_PROFILE_PHOTO_NAME,
-      tipo: DEFAULT_PROFILE_PHOTO_TYPE,
+      nome: env.DEFAULT_PROFILE_PHOTO_NAME,
+      originalname: env.DEFAULT_PROFILE_PHOTO_NAME,
+      tipo: env.DEFAULT_PROFILE_PHOTO_TYPE,
       tamanho: statSync(defaultPhotoPath).size,
-      local: DEFAULT_PROFILE_PHOTO_LOCAL,
+      local: env.DEFAULT_PROFILE_PHOTO_LOCAL,
       url: `/user/${userId}/foto`,
     };
   }

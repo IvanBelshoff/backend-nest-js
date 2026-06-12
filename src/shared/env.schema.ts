@@ -7,6 +7,10 @@ export const envSchema = z.object({
   DB_PORT: z.coerce.number().int().positive(),
   PASSWORD: z.string().min(1),
   JWT_SECRET: z.string().min(1),
+  SALT_ROUNDS: z.coerce.number().int().positive(),
+  DEFAULT_PROFILE_PHOTO_NAME: z.string().min(1),
+  DEFAULT_PROFILE_PHOTO_LOCAL: z.string().min(1),
+  DEFAULT_PROFILE_PHOTO_TYPE: z.string().min(1),
 });
 
 export type Env = z.infer<typeof envSchema>;

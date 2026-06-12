@@ -8,6 +8,7 @@ import {
   Res,
   StreamableFile,
   UploadedFile,
+  Request,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { createReadStream } from 'fs';
@@ -17,7 +18,7 @@ import { createUserSchema, type CreateUserDto } from './dtos/create-user.dto';
 import { ZodValidation } from 'src/shared/decorators/zod-validation.decorator';
 import { Public } from 'src/shared/decorators/auth-public.decorator';
 import { UploadPhoto } from 'src/shared/decorators/upload-photo.decorator';
-
+import * as UserRequest from 'src/shared/interfaces/UserRequest';
 @Controller('user')
 export class UsersController {
   constructor(private readonly usersService: UsersService) { }
@@ -27,9 +28,15 @@ export class UsersController {
   @UploadPhoto('foto')
   async create(
     @Body() dto: CreateUserDto,
+    @Request() req: UserRequest.UserRequest,
     @UploadedFile() foto?: Express.Multer.File,
   ) {
-    return this.usersService.create(dto, foto);
+
+    if (!req.user) {
+      throw new Error('User information is missing in the request');
+    }
+
+    return this.usersService.create(dto, req.user, foto);
   }
 
   @Get('/')
