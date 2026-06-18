@@ -6,8 +6,12 @@ import {
   OneToOne,
   JoinColumn,
   UpdateDateColumn,
+  ManyToMany,
+  JoinTable,
 } from 'typeorm';
 import { Foto } from './Fotos';
+import { Permissao } from './Permissoes';
+import { Regra } from './Regras';
 
 @Entity('usuarios')
 export class Usuario {
@@ -43,6 +47,30 @@ export class Usuario {
 
   @UpdateDateColumn({ nullable: false, type: 'timestamp' })
   data_atualizacao: Date;
+
+  @ManyToMany(() => Permissao, (permissao) => permissao.usuario, {
+    cascade: true,
+    onDelete: 'CASCADE',
+    onUpdate: 'SET NULL',
+  })
+  @JoinTable({
+    name: 'usuarios_permissoes',
+    joinColumns: [{ name: 'usuario_id' }],
+    inverseJoinColumns: [{ name: 'permissao_id' }],
+  })
+  permissao: Permissao[];
+
+  @ManyToMany(() => Regra, (regra) => regra.usuario, {
+    cascade: true,
+    onDelete: 'CASCADE',
+    onUpdate: 'SET NULL',
+  })
+  @JoinTable({
+    name: 'usuarios_regras',
+    joinColumns: [{ name: 'usuario_id' }],
+    inverseJoinColumns: [{ name: 'regra_id' }],
+  })
+  regra: Regra[];
 
   @OneToOne(() => Foto, (foto) => foto.usuario, {
     cascade: true,
