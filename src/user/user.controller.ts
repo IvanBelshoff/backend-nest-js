@@ -14,7 +14,7 @@ import type { Response } from 'express';
 import { createReadStream } from 'fs';
 
 import { UsersService } from './user.service';
-import { createUserSchema, type CreateUserDto } from './dtos/create-user.dto';
+import { createUserSchema, type CreateUserDto } from './dto/create-user.dto';
 import { ZodValidation } from 'src/shared/decorators/zod-validation.decorator';
 import { Public } from 'src/shared/decorators/auth-public.decorator';
 import { UploadPhoto } from 'src/shared/decorators/upload-photo.decorator';

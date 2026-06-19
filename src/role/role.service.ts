@@ -1,4 +1,3 @@
-/* eslint-disable no-useless-catch */
 import { Inject, Injectable } from '@nestjs/common';
 import { Permissao } from 'src/database/entities/Permissoes';
 import { Regra } from 'src/database/entities/Regras';
@@ -14,7 +13,6 @@ export class RoleService {
   ) {}
 
   async create(role: Partial<Regra>): Promise<number> {
-    // eslint-disable-next-line no-useless-catch
     try {
       const { nome } = role;
 
@@ -38,12 +36,11 @@ export class RoleService {
         return result;
       }
     } catch (error) {
-      throw error;
+      throw new Error('Erro ao criar a regra', { cause: error });
     }
   }
 
   async delete(id: number): Promise<void> {
-    // eslint-disable-next-line no-useless-catch
     try {
       const result = await this.roleRepository.findOne({
         where: {
@@ -58,12 +55,11 @@ export class RoleService {
 
       throw new Error('Erro ao apagar o registro');
     } catch (error) {
-      throw error;
+      throw new Error('Erro ao apagar o registro', { cause: error });
     }
   }
 
   async findAll(nome?: string): Promise<Regra[]> {
-    // eslint-disable-next-line no-useless-catch
     try {
       const result = this.roleRepository
         .createQueryBuilder('regra')
@@ -79,7 +75,7 @@ export class RoleService {
 
       return regras;
     } catch (error) {
-      throw error;
+      throw new Error('Erro ao buscar registros', { cause: error });
     }
   }
 
@@ -100,7 +96,7 @@ export class RoleService {
 
       return undefined;
     } catch (error) {
-      throw error;
+      throw new Error('Erro ao buscar o registro', { cause: error });
     }
   }
 
@@ -128,7 +124,7 @@ export class RoleService {
         },
       });
 
-      if (regrasFiltradas instanceof Error) {
+      if (regrasFiltradas.length === 0) {
         throw new Error('Registro não encontrado');
       }
 
@@ -148,7 +144,7 @@ export class RoleService {
 
       return regrasFiltradasComPermissoes || [];
     } catch (error) {
-      throw error;
+      throw new Error('Erro ao buscar registros', { cause: error });
     }
   }
 
@@ -194,7 +190,7 @@ export class RoleService {
 
       return;
     } catch (error) {
-      throw error;
+      throw new Error('Erro ao atualizar a regra', { cause: error });
     }
   }
 }
