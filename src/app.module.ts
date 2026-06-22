@@ -5,6 +5,7 @@ import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './auth/auth.module';
 import { RoleModule } from './role/role.module';
 import { PermissionModule } from './permission/permission.module';
+import { SyncRolesAndPermissions } from './shared/services/SyncRolesAndPermissions';
 
 @Module({
   controllers: [AppController],
@@ -15,5 +16,6 @@ import { PermissionModule } from './permission/permission.module';
     RoleModule,
     PermissionModule,
   ],
+  providers: [SyncRolesAndPermissions],
 })
 export class AppModule {}

@@ -19,11 +19,13 @@ import { ZodValidation } from 'src/shared/decorators/zod-validation.decorator';
 import { Public } from 'src/shared/decorators/auth-public.decorator';
 import { UploadPhoto } from 'src/shared/decorators/upload-photo.decorator';
 import * as UserRequest from 'src/shared/interfaces/UserRequest';
+import { Authorization } from 'src/shared/decorators/authorization.decorator';
 @Controller('user')
 export class UsersController {
   constructor(private readonly usersService: UsersService) { }
 
   @Post('/')
+  @Authorization('role', ['admin'])
   @ZodValidation(createUserSchema)
   @UploadPhoto('foto')
   async create(

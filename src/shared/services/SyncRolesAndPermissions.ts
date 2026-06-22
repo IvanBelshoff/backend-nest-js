@@ -1,9 +1,10 @@
-import { Inject } from '@nestjs/common';
+import { Inject, Injectable, OnApplicationBootstrap } from '@nestjs/common';
 import { Permissao } from 'src/database/entities/Permissoes';
 import { Regra } from 'src/database/entities/Regras';
 import { PermissionService } from 'src/permission/permission.service';
 import { RoleService } from 'src/role/role.service';
 import { Repository } from 'typeorm';
+import { logger } from './Logger';
 
 interface IPermissao {
   nome: string;
@@ -17,14 +18,36 @@ interface IRegra {
 
 type RegrasPermissoesEnv = Record<string, string[]>;
 
-export class SyncRolesAndPermissions {
+/*Existe um bug a ser corrigido: 
+Error: Erro ao cadastrar o registro
+    at PermissionService.create (C:\Users\ivan.belshoff\Desktop\Projetos\backend-nest-js\src\permission\permission.service.ts:58:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    ... 7 lines matching cause stack trace ...
+    at async NestApplication.listen (C:\Users\ivan.belshoff\Desktop\Projetos\backend-nest-js\node_modules\@nestjs\core\nest-application.js:177:13) {
+  [cause]: Error: Permissao já cadastrada com este nome
+      at PermissionService.create (C:\Users\ivan.belshoff\Desktop\Projetos\backend-nest-js\src\permission\permission.service.ts:29:15)
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async SyncRolesAndPermissions.createAddedPermissions (C:\Users\ivan.belshoff\Desktop\Projetos\backend-nest-js\src\shared\services\SyncRolesAndPermissions.ts:231:7)
+      at async SyncRolesAndPermissions.syncRolesAndPermissions (C:\Users\ivan.belshoff\Desktop\Projetos\backend-nest-js\src\shared\services\SyncRolesAndPermissions.ts:387:38)
+      at async SyncRolesAndPermissions.onApplicationBootstrap (C:\Users\ivan.belshoff\Desktop\Projetos\backend-nest-js\src\shared\services\SyncRolesAndPermissions.ts:459:5)
+      at async Promise.all (index 0)
+      at async callModuleBootstrapHook (C:\Users\ivan.belshoff\Desktop\Projetos\backend-nest-js\node_modules\@nestjs\core\hooks\on-app-bootstrap.hook.js:43:5)
+      at async NestApplication.callBootstrapHook (C:\Users\ivan.belshoff\Desktop\Projetos\backend-nest-js\node_modules\@nestjs\core\nest-application-context.js:274:13)
+      at async NestApplication.init (C:\Users\ivan.belshoff\Desktop\Projetos\backend-nest-js\node_modules\@nestjs\core\nest-application.js:107:9)
+      at async NestApplication.listen (C:\Users\ivan.belshoff\Desktop\Projetos\backend-nest-js\node_modules\@nestjs\core\nest-application.js:177:13)
+}
+
+As regras e permissões estão sendo sincronizadas com o banco de dados, mas em alguma parte esta enviando uma permissão para ser criada mesmo que ela já exista, o que causa um erro e impede a aplicação de iniciar. O código precisa ser revisado para evitar tentativas de criação de permissões já existentes durante a sincronização.
+*/
+@Injectable()
+export class SyncRolesAndPermissions implements OnApplicationBootstrap {
   constructor(
     @Inject('PERMISSION_REPOSITORY')
-    private permissionRepository?: Repository<Permissao>,
+    private permissionRepository: Repository<Permissao>,
     @Inject('ROLE_REPOSITORY')
-    private roleRepository?: Repository<Regra>,
-    private readonly permissionService?: PermissionService,
-    private readonly roleService?: RoleService,
+    private roleRepository: Repository<Regra>,
+    private readonly permissionService: PermissionService,
+    private readonly roleService: RoleService,
   ) {}
 
   private extrairNomeEmMinusculo = (texto: string): string => {
@@ -57,11 +80,15 @@ export class SyncRolesAndPermissions {
         typeof parsedValue !== 'object' ||
         Array.isArray(parsedValue)
       ) {
+        logger.warn('REGRAS_PERMISSOES is not a valid object', { rawValue });
         return {};
       }
 
       return parsedValue as RegrasPermissoesEnv;
     } catch (error) {
+      logger.error('Failed to parse REGRAS_PERMISSOES', {
+        error: error instanceof Error ? error.message : String(error),
+      });
       return {};
     }
   };
@@ -102,13 +129,16 @@ export class SyncRolesAndPermissions {
     }
 
     const novaRegra = regrasAdicionadas[0];
-    const atualizaRegra = await this.permissionService.updateById(
-      regraAtualizada.id,
-      {
-        nome: novaRegra.nome,
-        descricao: `Gerenciamento de ${this.extrairNomeEmMinusculo(novaRegra.nome)}`,
-      },
-    );
+
+    await this.permissionService.updateById(regraAtualizada.id, {
+      nome: novaRegra.nome,
+      descricao: `Gerenciamento de ${this.extrairNomeEmMinusculo(novaRegra.nome)}`,
+    });
+
+    logger.info('Role renamed during sync', {
+      from: regrasRemovidas[0].nome,
+      to: novaRegra.nome,
+    });
 
     return true;
   };
@@ -136,14 +166,15 @@ export class SyncRolesAndPermissions {
     }
 
     const novaPermissao = permissoesAdicionadas[0];
-    const atualizaPermissao = await this.permissionService.updateById(
-      permissaoAtualizada.id,
-      {
-        nome: novaPermissao.nome,
-        descricao: `Gerenciamento do método: ${this.extrairNomeEmMinusculo(permissaoAtualizada.regra.nome)} ${this.extrairNomeEmMinusculo(novaPermissao.nome)}`,
-      },
-    );
+    await this.permissionService.updateById(permissaoAtualizada.id, {
+      nome: novaPermissao.nome,
+      descricao: `Gerenciamento do método: ${this.extrairNomeEmMinusculo(permissaoAtualizada.regra.nome)} ${this.extrairNomeEmMinusculo(novaPermissao.nome)}`,
+    });
 
+    logger.info('Permission renamed during sync', {
+      from: permissoesRemovidas[0].nome,
+      to: novaPermissao.nome,
+    });
     return true;
   };
 
@@ -153,10 +184,15 @@ export class SyncRolesAndPermissions {
     permissions: IPermissao[],
   ): Promise<void | Error> => {
     for (const permissaoAdicionada of permissions) {
-      const result = await this.permissionService.create({
+      await this.permissionService.create({
         regra_id: roleId,
         nome: permissaoAdicionada.nome,
         descricao: `Gerenciamento do método: ${this.extrairNomeEmMinusculo(permissaoAdicionada.nome)} ${this.extrairNomeEmMinusculo(roleName)}`,
+      });
+
+      logger.info('Permission created for role during sync', {
+        roleName,
+        permissionName: permissaoAdicionada.nome,
       });
     }
 
@@ -172,6 +208,10 @@ export class SyncRolesAndPermissions {
         descricao: `Gerenciamento de ${this.extrairNomeEmMinusculo(regraAdicionada.nome)}`,
       });
 
+      logger.info('Role created during sync', {
+        roleName: regraAdicionada.nome,
+      });
+
       if (regraAdicionada.nome === 'REGRA_ADMIN') {
         continue;
       }
@@ -183,6 +223,10 @@ export class SyncRolesAndPermissions {
       );
 
       if (permissionsResult instanceof Error) {
+        logger.error('Failed to create permission for new role during sync', {
+          roleName: regraAdicionada.nome,
+          error: permissionsResult.message,
+        });
         return permissionsResult;
       }
     }
@@ -199,13 +243,21 @@ export class SyncRolesAndPermissions {
       });
 
       if (!regra) {
+        logger.warn('Permission has no role during sync', {
+          permissionName: permissaoAdicionada.nome,
+        });
         continue;
       }
 
-      const permissao = await this.permissionService.create({
+      await this.permissionService.create({
         regra_id: regra.id,
         nome: permissaoAdicionada.nome,
         descricao: `Gerenciamento do método: ${this.extrairNomeEmMinusculo(regra.nome)} ${this.extrairNomeEmMinusculo(permissaoAdicionada.nome)}`,
+      });
+
+      logger.info('Standalone permission created during sync', {
+        permissionName: permissaoAdicionada.nome,
+        roleName: regra.nome,
       });
     }
 
@@ -217,11 +269,13 @@ export class SyncRolesAndPermissions {
   ): Promise<void | Error> => {
     for (const regraRemovida of regrasRemovidas) {
       if (regraRemovida.nome === 'REGRA_ADMIN') {
-        await this.getCurrentRulesSnapshot();
+        logger.warn('Attempt to remove REGRA_ADMIN blocked during sync', {
+          restoreValue: await this.getCurrentRulesSnapshot(),
+        });
         continue;
       }
 
-      const regra = await this.roleService.delete(regraRemovida.id);
+      logger.info('Role removed during sync', { roleName: regraRemovida.nome });
     }
 
     return;
@@ -231,15 +285,19 @@ export class SyncRolesAndPermissions {
     permissoesRemovidas: Permissao[],
   ): Promise<void | Error> => {
     for (const permissaoRemovida of permissoesRemovidas) {
-      const permissao = await this.permissionService.delete(
-        permissaoRemovida.id,
-      );
+      await this.permissionService.delete(permissaoRemovida.id);
+
+      logger.info('Permission removed during sync', {
+        permissionName: permissaoRemovida.nome,
+      });
     }
 
     return;
   };
 
   public async syncRolesAndPermissions() {
+    console.log('Sincronizando regras e permissões...');
+
     const regrasPermissoesEnv = this.loadRegrasPermissoesEnv();
 
     const permissoesEnv: IPermissao[] = Object.entries(
@@ -332,11 +390,18 @@ export class SyncRolesAndPermissions {
     }
 
     if (regrasEnv.length === 0) {
-      await this.getCurrentRulesSnapshot();
+      logger.warn(
+        'Sync blocked because no roles were provided in environment',
+        {
+          restoreValue: await this.getCurrentRulesSnapshot(),
+        },
+      );
+
       return;
     }
 
     const createdRolesResult = await this.createAddedRoles(regras_adicionadas);
+
     if (createdRolesResult instanceof Error) {
       return;
     }
@@ -360,29 +425,32 @@ export class SyncRolesAndPermissions {
     }
 
     if (
-      regras_mantidas.length === 0 &&
+      regras_mantidas.length === regrasBD.length &&
       regras_adicionadas.length === 0 &&
       regras_removidas.length === 0 &&
-      permissoes_mantidas.length === 0 &&
+      permissoes_mantidas.length === permissoesBD.length &&
       permissoes_adicionadas.length === 0 &&
       permissoes_removidas.length === 0
     ) {
+      logger.info('Roles and permissions are synchronized with database');
       return;
     }
 
     if (
-      regras_mantidas.length === 0 &&
+      regras_mantidas.length === regrasBD.length &&
       regras_adicionadas.length === 0 &&
       regras_removidas.length === 0
     ) {
+      logger.info('Roles are synchronized with database');
       return;
     }
 
     if (
-      permissoes_mantidas.length === 0 &&
+      permissoes_mantidas.length === permissoesBD.length &&
       permissoes_adicionadas.length === 0 &&
       permissoes_removidas.length === 0
     ) {
+      logger.info('Permissions are synchronized with database');
       return;
     }
 
@@ -390,11 +458,27 @@ export class SyncRolesAndPermissions {
       await this.roleRepository.find({ relations: { permissao: true } }),
     );
 
-    console.log(
-      'Regras e Permissões sincronizadas com sucesso!',
-      regrasConvertidas,
+    logger.warn(
+      'Many sync operations were performed. Consider restoring REGRAS_PERMISSOES',
+      {
+        restoreValue: regrasConvertidas,
+      },
     );
 
     return;
+  }
+
+  async onApplicationBootstrap() {
+    console.log(process.env.SYNC_ROLES_ON_STARTUP);
+
+    if (
+      process.env.SYNC_ROLES_ON_STARTUP !== undefined &&
+      String(process.env.SYNC_ROLES_ON_STARTUP) !== 'true' &&
+      process.env.NODE_ENV !== 'development'
+    ) {
+      return;
+    }
+
+    await this.syncRolesAndPermissions();
   }
 }

@@ -5,6 +5,6 @@ import { roleProviders } from 'src/role/role.provider';
 
 @Module({
   providers: [...permissionProviders, ...roleProviders, PermissionService],
-  exports: [PermissionService],
+  exports: [PermissionService, ...permissionProviders],
 })
 export class PermissionModule {}
