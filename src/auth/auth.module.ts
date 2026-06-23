@@ -13,10 +13,10 @@ import { authProviders } from './auth.provider';
     JwtModule.register({
       global: true,
       secret: jwtConstants.secret,
-      signOptions: { expiresIn: '1h' },
+      signOptions: { expiresIn: '1d' },
     }),
   ],
-  providers: [authProviders, AuthService],
+  providers: [...authProviders, AuthService],
   controllers: [AuthController],
 })
 export class AuthModule {}

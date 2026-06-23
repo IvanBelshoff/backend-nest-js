@@ -22,7 +22,7 @@ import * as UserRequest from 'src/shared/interfaces/UserRequest';
 import { Authorization } from 'src/shared/decorators/authorization.decorator';
 @Controller('user')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) { }
+  constructor(private readonly usersService: UsersService) {}
 
   @Post('/')
   @Authorization('role', ['admin'])
@@ -33,7 +33,6 @@ export class UsersController {
     @Request() req: UserRequest.UserRequest,
     @UploadedFile() foto?: Express.Multer.File,
   ) {
-
     if (!req.user) {
       throw new Error('User information is missing in the request');
     }
@@ -41,8 +40,11 @@ export class UsersController {
     return this.usersService.create(dto, req.user, foto);
   }
 
+
   @Get('/')
+  @Authorization('role', ['REGRA_ADMIN'])
   async findAll() {
+    console.log('findAll called');
     return this.usersService.findAll();
   }
 

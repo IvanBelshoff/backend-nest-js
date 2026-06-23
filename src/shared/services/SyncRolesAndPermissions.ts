@@ -469,7 +469,6 @@ export class SyncRolesAndPermissions implements OnApplicationBootstrap {
   }
 
   async onApplicationBootstrap() {
-    console.log(process.env.SYNC_ROLES_ON_STARTUP);
 
     if (
       process.env.SYNC_ROLES_ON_STARTUP !== undefined &&

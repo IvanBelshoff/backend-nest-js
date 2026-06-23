@@ -49,7 +49,10 @@ export class UsersService {
               ? `${requesterUser.nome} ${requesterUser.sobrenome}`
               : 'Sistema',
             senha: user.senha
-              ? await bcrypt.hash(user.senha, env.SALT_ROUNDS)
+              ? await bcrypt.hash(
+                  user.senha,
+                  await bcrypt.genSalt(env.SALT_ROUNDS),
+                )
               : user.senha,
           });
 
@@ -77,7 +80,14 @@ export class UsersService {
 
   async findOne(email: string): Promise<Usuario | undefined> {
     const user =
-      (await this.userRepository.findOne({ where: { email } })) || undefined;
+      (await this.userRepository.findOne({
+        where: { email },
+        relations: {
+          foto: true,
+          regra: true,
+          permissao: true,
+        },
+      })) || undefined;
 
     return user;
   }
@@ -110,7 +120,7 @@ export class UsersService {
     return isAbsolute(local) ? local : join(__dirname, '..', local);
   }
 
-  private buildPhotoData(
+  public buildPhotoData(
     userId: number,
     foto?: Express.Multer.File,
   ): Partial<Foto> {

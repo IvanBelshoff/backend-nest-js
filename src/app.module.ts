@@ -6,6 +6,7 @@ import { AuthModule } from './auth/auth.module';
 import { RoleModule } from './role/role.module';
 import { PermissionModule } from './permission/permission.module';
 import { SyncRolesAndPermissions } from './shared/services/SyncRolesAndPermissions';
+import { DefaultUserService } from './shared/services/SeedDefaultUser';
 
 @Module({
   controllers: [AppController],
@@ -16,6 +17,6 @@ import { SyncRolesAndPermissions } from './shared/services/SyncRolesAndPermissio
     RoleModule,
     PermissionModule,
   ],
-  providers: [SyncRolesAndPermissions],
+  providers: [SyncRolesAndPermissions, DefaultUserService],
 })
 export class AppModule {}
