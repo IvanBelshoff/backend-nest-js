@@ -8,6 +8,13 @@ export const envSchema = z.object({
   DB_PORT: z.coerce.number().int().positive(),
   PASSWORD: z.string().min(1),
   JWT_SECRET: z.string().min(1),
+  REFRESH_TOKEN_PEPPER: z.string().min(32),
+  CORS_ORIGIN: z.string().min(1),
+  COOKIE_SECURE: z
+    .string()
+    .optional()
+    .transform((value) => value === 'true'),
+  COOKIE_SAME_SITE: z.enum(['lax', 'strict', 'none']).default('lax'),
   SALT_ROUNDS: z.coerce.number().int().positive(),
   DEFAULT_PROFILE_PHOTO_NAME: z.string().min(1),
   DEFAULT_PROFILE_PHOTO_LOCAL: z.string().min(1),

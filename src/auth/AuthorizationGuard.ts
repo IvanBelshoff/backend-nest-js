@@ -25,8 +25,6 @@ export class AuthorizationGuard implements CanActivate {
         [context.getHandler(), context.getClass()],
       );
 
-    console.log('Authorization metadata:', authorization);
-
     if (!authorization) {
       return true;
     }

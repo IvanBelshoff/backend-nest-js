@@ -4,16 +4,22 @@ import {
   Post,
   HttpCode,
   HttpStatus,
-  UseGuards,
   Get,
   Request,
+  Res,
+  UnauthorizedException,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { AuthService } from './auth.service';
 import { ZodValidation } from 'src/shared/decorators/zod-validation.decorator';
 import { signinSchema, type SigninDto } from './dtos/signin.dto';
-import { AuthGuard } from './auth.guard';
 import * as UserRequest from 'src/shared/interfaces/UserRequest';
 import { Public } from 'src/shared/decorators/auth-public.decorator';
+import {
+  clearRefreshCookie,
+  getRefreshTokenFromCookie,
+  setRefreshCookie,
+} from './utils/refresh-cookie.util';
 
 @Controller('auth')
 export class AuthController {
@@ -23,11 +29,61 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @Post('login')
   @ZodValidation(signinSchema)
-  signIn(@Body() dto: SigninDto) {
-    return this.authService.signIn(dto.email, dto.senha);
+  async signIn(
+    @Body() dto: SigninDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const session = await this.authService.signIn(dto.email, dto.senha);
+    setRefreshCookie(
+      res,
+      session.refreshToken.rawToken,
+      session.refreshToken.expiresAt,
+    );
+
+    return {
+      access_token: session.access_token,
+      expires_in: session.expires_in,
+    };
   }
 
-  @UseGuards(AuthGuard)
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @Post('refresh')
+  async refresh(
+    @Request() req: UserRequest.UserRequest,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const rawRefreshToken = getRefreshTokenFromCookie(req);
+
+    if (!rawRefreshToken) {
+      throw new UnauthorizedException();
+    }
+
+    const session = await this.authService.refresh(rawRefreshToken);
+    setRefreshCookie(
+      res,
+      session.refreshToken.rawToken,
+      session.refreshToken.expiresAt,
+    );
+
+    return {
+      access_token: session.access_token,
+      expires_in: session.expires_in,
+    };
+  }
+
+  @Public()
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Post('logout')
+  async logout(
+    @Request() req: UserRequest.UserRequest,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const rawRefreshToken = getRefreshTokenFromCookie(req);
+    await this.authService.logout(rawRefreshToken);
+    clearRefreshCookie(res);
+  }
+
   @Get('profile')
   getProfile(@Request() req: UserRequest.UserRequest) {
     if (!req.user) {

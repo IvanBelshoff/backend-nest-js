@@ -34,8 +34,6 @@ export class DefaultUserService implements OnApplicationBootstrap {
 
         const senha = env.SENHA_USER_DEFAULT;
 
-        console.log(senha);
-
         const hashPassword = await bcrypt.hash(
           senha,
           await bcrypt.genSalt(env.SALT_ROUNDS),

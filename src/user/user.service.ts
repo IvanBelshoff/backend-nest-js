@@ -92,6 +92,19 @@ export class UsersService {
     return user;
   }
 
+  async findById(id: number): Promise<Usuario | undefined> {
+    const user =
+      (await this.userRepository.findOne({
+        where: { id },
+      })) || undefined;
+
+    return user;
+  }
+
+  async updateUltimoLogin(id: number): Promise<void> {
+    await this.userRepository.update(id, { ultimo_login: new Date() });
+  }
+
   async findPhotoFileByUserId(
     userId: number,
   ): Promise<{ path: string; type: string }> {

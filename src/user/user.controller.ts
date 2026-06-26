@@ -44,7 +44,6 @@ export class UsersController {
   @Get('/')
   @Authorization('role', ['REGRA_ADMIN'])
   async findAll() {
-    console.log('findAll called');
     return this.usersService.findAll();
   }
 
