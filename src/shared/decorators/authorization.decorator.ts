@@ -2,9 +2,13 @@ import { SetMetadata } from '@nestjs/common';
 
 export const AUTHORIZATION_KEY = 'authorization';
 
-export interface AuthorizationMetadata {
+export interface AuthorizationRule {
   type: 'role' | 'permission';
   required: string[];
+}
+
+export interface AuthorizationMetadata {
+  requirements: AuthorizationRule[];
 }
 
 export const Authorization = (
@@ -12,6 +16,10 @@ export const Authorization = (
   required: string[],
 ) =>
   SetMetadata(AUTHORIZATION_KEY, {
-    type,
-    required,
+    requirements: [{ type, required }],
+  } satisfies AuthorizationMetadata);
+
+export const AuthorizationAll = (...requirements: AuthorizationRule[]) =>
+  SetMetadata(AUTHORIZATION_KEY, {
+    requirements,
   } satisfies AuthorizationMetadata);

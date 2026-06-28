@@ -1,4 +1,5 @@
-import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { RefreshToken } from 'src/database/entities/RefreshTokens';
 import { refreshTokenConstants } from './constants';
@@ -19,9 +20,9 @@ export interface RotatedRefreshToken extends IssuedRefreshToken {
 @Injectable()
 export class RefreshTokenService {
   constructor(
-    @Inject('REFRESH_TOKEN_REPOSITORY')
+    @InjectRepository(RefreshToken)
     private readonly refreshTokenRepository: Repository<RefreshToken>,
-    @Inject('DATA_SOURCE')
+    @InjectDataSource()
     private readonly dataSource: DataSource,
   ) {}
 

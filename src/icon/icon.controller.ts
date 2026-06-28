@@ -9,7 +9,7 @@ export class IconController {
   constructor(private readonly iconService: IconService) {}
 
   @Get('/')
-  findAll(
+  async findAll(
     @Query() query: Record<string, string>,
     @Res({ passthrough: true }) response: Response,
   ) {
@@ -18,7 +18,11 @@ export class IconController {
       maxLimit: 200,
     });
 
-    const { data, total } = this.iconService.findAll(page, limit, query.nome);
+    const { data, total } = await this.iconService.findAll(
+      page,
+      limit,
+      query.nome,
+    );
 
     setTotalCount(response, total);
 

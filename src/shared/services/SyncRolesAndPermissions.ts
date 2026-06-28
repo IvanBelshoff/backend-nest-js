@@ -1,4 +1,5 @@
-import { Inject, Injectable, OnApplicationBootstrap } from '@nestjs/common';
+import { Injectable, OnApplicationBootstrap } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
 import { Permissao } from 'src/database/entities/Permissoes';
 import { Regra } from 'src/database/entities/Regras';
 import { PermissionService } from 'src/permission/permission.service';
@@ -18,33 +19,12 @@ interface IRegra {
 
 type RegrasPermissoesEnv = Record<string, string[]>;
 
-/*Existe um bug a ser corrigido: 
-Error: Erro ao cadastrar o registro
-    at PermissionService.create (C:\Users\ivan.belshoff\Desktop\Projetos\backend-nest-js\src\permission\permission.service.ts:58:13)
-    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
-    ... 7 lines matching cause stack trace ...
-    at async NestApplication.listen (C:\Users\ivan.belshoff\Desktop\Projetos\backend-nest-js\node_modules\@nestjs\core\nest-application.js:177:13) {
-  [cause]: Error: Permissao já cadastrada com este nome
-      at PermissionService.create (C:\Users\ivan.belshoff\Desktop\Projetos\backend-nest-js\src\permission\permission.service.ts:29:15)
-      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
-      at async SyncRolesAndPermissions.createAddedPermissions (C:\Users\ivan.belshoff\Desktop\Projetos\backend-nest-js\src\shared\services\SyncRolesAndPermissions.ts:231:7)
-      at async SyncRolesAndPermissions.syncRolesAndPermissions (C:\Users\ivan.belshoff\Desktop\Projetos\backend-nest-js\src\shared\services\SyncRolesAndPermissions.ts:387:38)
-      at async SyncRolesAndPermissions.onApplicationBootstrap (C:\Users\ivan.belshoff\Desktop\Projetos\backend-nest-js\src\shared\services\SyncRolesAndPermissions.ts:459:5)
-      at async Promise.all (index 0)
-      at async callModuleBootstrapHook (C:\Users\ivan.belshoff\Desktop\Projetos\backend-nest-js\node_modules\@nestjs\core\hooks\on-app-bootstrap.hook.js:43:5)
-      at async NestApplication.callBootstrapHook (C:\Users\ivan.belshoff\Desktop\Projetos\backend-nest-js\node_modules\@nestjs\core\nest-application-context.js:274:13)
-      at async NestApplication.init (C:\Users\ivan.belshoff\Desktop\Projetos\backend-nest-js\node_modules\@nestjs\core\nest-application.js:107:9)
-      at async NestApplication.listen (C:\Users\ivan.belshoff\Desktop\Projetos\backend-nest-js\node_modules\@nestjs\core\nest-application.js:177:13)
-}
-
-As regras e permissões estão sendo sincronizadas com o banco de dados, mas em alguma parte esta enviando uma permissão para ser criada mesmo que ela já exista, o que causa um erro e impede a aplicação de iniciar. O código precisa ser revisado para evitar tentativas de criação de permissões já existentes durante a sincronização.
-*/
 @Injectable()
 export class SyncRolesAndPermissions implements OnApplicationBootstrap {
   constructor(
-    @Inject('PERMISSION_REPOSITORY')
+    @InjectRepository(Permissao)
     private permissionRepository: Repository<Permissao>,
-    @Inject('ROLE_REPOSITORY')
+    @InjectRepository(Regra)
     private roleRepository: Repository<Regra>,
     private readonly permissionService: PermissionService,
     private readonly roleService: RoleService,
@@ -406,8 +386,19 @@ export class SyncRolesAndPermissions implements OnApplicationBootstrap {
       return;
     }
 
+    const permissoesBDPosRoles = await this.permissionRepository.find({
+      relations: { regra: true },
+    });
+
+    const permissoes_adicionadas_restantes = permissoesEnv.filter(
+      (permissaoEnv) =>
+        !permissoesBDPosRoles.some(
+          (permissaoBD) => permissaoBD.nome === permissaoEnv.nome,
+        ),
+    );
+
     const createdPermissionsResult = await this.createAddedPermissions(
-      permissoes_adicionadas,
+      permissoes_adicionadas_restantes,
     );
     if (createdPermissionsResult instanceof Error) {
       return;

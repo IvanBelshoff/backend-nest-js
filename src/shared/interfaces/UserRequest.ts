@@ -1,4 +1,5 @@
 import type { Request } from 'express';
+import type { Usuario } from 'src/database/entities/Usuarios';
 
 export interface UserRequest extends Request {
   user?: {
@@ -7,4 +8,5 @@ export interface UserRequest extends Request {
     iat: number;
     exp: number;
   };
+  authUser?: Usuario;
 }

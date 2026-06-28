@@ -1,9 +1,19 @@
 import { Injectable } from '@nestjs/common';
-import { iconsRepository, IIcone } from './icons.data';
+import type { IIcone } from './icons.data';
 
 @Injectable()
 export class IconService {
-  private readonly icons: IIcone[] = iconsRepository;
+  private iconsPromise: Promise<IIcone[]> | null = null;
+
+  private loadIcons(): Promise<IIcone[]> {
+    if (!this.iconsPromise) {
+      this.iconsPromise = import('./icons.data.js').then(
+        (module) => module.iconsRepository,
+      );
+    }
+
+    return this.iconsPromise;
+  }
 
   private normalize(value: string): string {
     return value
@@ -12,14 +22,14 @@ export class IconService {
       .toLowerCase();
   }
 
-  private filterByName(nome?: string): IIcone[] {
+  private filterByName(icons: IIcone[], nome?: string): IIcone[] {
     if (!nome) {
-      return this.icons;
+      return icons;
     }
 
     const normalized = this.normalize(nome);
 
-    return this.icons.filter(
+    return icons.filter(
       ({ icon, translatedName, variantNames }) =>
         this.normalize(icon).includes(normalized) ||
         this.normalize(translatedName).includes(normalized) ||
@@ -29,12 +39,13 @@ export class IconService {
     );
   }
 
-  findAll(
+  async findAll(
     page: number,
     limit: number,
     nome?: string,
-  ): { data: string[]; total: number } {
-    const filtered = this.filterByName(nome);
+  ): Promise<{ data: string[]; total: number }> {
+    const icons = await this.loadIcons();
+    const filtered = this.filterByName(icons, nome);
 
     const data = filtered.slice(0, page * limit).map(({ icon }) => icon);
 

@@ -1,10 +1,12 @@
 import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { RoleService } from './role.service';
-import { roleProviders } from './role.provider';
-import { permissionProviders } from 'src/permission/permission.provider';
+import { Regra } from '../database/entities/Regras';
+import { Permissao } from '../database/entities/Permissoes';
 
 @Module({
-  providers: [...roleProviders, ...permissionProviders, RoleService],
-  exports: [RoleService, ...roleProviders],
+  imports: [TypeOrmModule.forFeature([Regra, Permissao])],
+  providers: [RoleService],
+  exports: [RoleService],
 })
 export class RoleModule {}

@@ -9,6 +9,7 @@ import {
   Res,
   UnauthorizedException,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import type { Response } from 'express';
 import { AuthService } from './auth.service';
 import { ZodValidation } from 'src/shared/decorators/zod-validation.decorator';
@@ -27,6 +28,7 @@ export class AuthController {
 
   @Public()
   @HttpCode(HttpStatus.OK)
+  @Throttle({ login: { limit: 5, ttl: 900_000 } })
   @Post('login')
   @ZodValidation(signinSchema)
   async signIn(
@@ -48,6 +50,7 @@ export class AuthController {
 
   @Public()
   @HttpCode(HttpStatus.OK)
+  @Throttle({ login: { limit: 5, ttl: 900_000 } })
   @Post('refresh')
   async refresh(
     @Request() req: UserRequest.UserRequest,

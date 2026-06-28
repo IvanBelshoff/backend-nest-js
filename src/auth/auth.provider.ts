@@ -1,8 +1,7 @@
 import { APP_GUARD } from '@nestjs/core';
-import { DataSource } from 'typeorm';
 import { AuthGuard } from './auth.guard';
 import { AuthorizationGuard } from './AuthorizationGuard';
-import { RefreshToken } from 'src/database/entities/RefreshTokens';
+import { ResourceOwnerGuard } from 'src/shared/guards/resource-owner.guard';
 
 export const authProviders = [
   {
@@ -14,9 +13,7 @@ export const authProviders = [
     useClass: AuthorizationGuard,
   },
   {
-    provide: 'REFRESH_TOKEN_REPOSITORY',
-    useFactory: (dataSource: DataSource) =>
-      dataSource.getRepository(RefreshToken),
-    inject: ['DATA_SOURCE'],
+    provide: APP_GUARD,
+    useClass: ResourceOwnerGuard,
   },
 ];

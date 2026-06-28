@@ -1,4 +1,5 @@
-import { Inject, Injectable, OnApplicationBootstrap } from '@nestjs/common';
+import { Injectable, OnApplicationBootstrap } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
 import { Foto } from 'src/database/entities/Fotos';
 import { Regra } from 'src/database/entities/Regras';
 import { Usuario } from 'src/database/entities/Usuarios';
@@ -11,7 +12,7 @@ import { UsersService } from 'src/user/user.service';
 @Injectable()
 export class DefaultUserService implements OnApplicationBootstrap {
   constructor(
-    @Inject('USER_REPOSITORY')
+    @InjectRepository(Usuario)
     private userRepository: Repository<Usuario>,
     private userService: UsersService,
   ) {}

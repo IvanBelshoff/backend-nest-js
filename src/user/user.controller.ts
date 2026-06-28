@@ -13,6 +13,7 @@ import {
   StreamableFile,
   UploadedFile,
   Request,
+  UnauthorizedException,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { createReadStream } from 'fs';
@@ -49,7 +50,13 @@ import { Public } from 'src/shared/decorators/auth-public.decorator';
 import { UploadPhoto } from 'src/shared/decorators/upload-photo.decorator';
 import * as UserRequest from 'src/shared/interfaces/UserRequest';
 import { Authorization } from 'src/shared/decorators/authorization.decorator';
-import { parsePagination, setTotalCount } from 'src/shared/dto/pagination.dto';
+import {
+  SelfOrAdmin,
+  SelfOrRoles,
+} from 'src/shared/decorators/resource-owner.decorator';
+import { ZodQueryValidation } from 'src/shared/decorators/zod-validation.decorator';
+import { setTotalCount } from 'src/shared/dto/pagination.dto';
+import { userQuerySchema, type UserQueryDto } from './dto/user-query.dto';
 
 @Controller('user')
 export class UsersController {
@@ -65,7 +72,7 @@ export class UsersController {
     @UploadedFile() foto?: Express.Multer.File,
   ) {
     if (!req.user) {
-      throw new Error('User information is missing in the request');
+      throw new UnauthorizedException();
     }
 
     return this.usersService.create(dto, req.user, foto);
@@ -73,13 +80,12 @@ export class UsersController {
 
   @Get('/')
   @Authorization('role', ['REGRA_USUARIO'])
+  @ZodQueryValidation(userQuerySchema)
   async findAll(
-    @Query() query: unknown,
+    @Query() query: UserQueryDto,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const { page, limit, filter } = parsePagination(query, {
-      defaultLimit: 7,
-    });
+    const { page, limit, filter } = query;
 
     const { data, total } = await this.usersService.findAllPaginated(
       page,
@@ -107,6 +113,7 @@ export class UsersController {
   }
 
   @Get('/:id')
+  @SelfOrRoles(['REGRA_USUARIO'])
   async findById(@Param('id', ParseIntPipe) id: number) {
     return this.usersService.findByIdWithRelations(id);
   }
@@ -145,6 +152,7 @@ export class UsersController {
   }
 
   @Patch('/dashboards/favorites/:id')
+  @SelfOrAdmin()
   @ZodValidation(updateFavoritesSchema)
   @HttpCode(204)
   async updateFavorites(
@@ -180,6 +188,7 @@ export class UsersController {
   }
 
   @Patch('/password/:id')
+  @SelfOrAdmin()
   @ZodValidation(updatePasswordSchema)
   async updatePassword(
     @Param('id', ParseIntPipe) id: number,
@@ -199,13 +208,14 @@ export class UsersController {
     @UploadedFile() foto?: Express.Multer.File,
   ) {
     if (!req.user) {
-      throw new Error('User information is missing in the request');
+      throw new UnauthorizedException();
     }
 
     return this.usersService.update(id, dto, req.user, foto);
   }
 
   @Delete('/photo/:id')
+  @SelfOrAdmin()
   @HttpCode(204)
   async deletePhoto(@Param('id', ParseIntPipe) id: number) {
     await this.usersService.deletePhoto(id);

@@ -2,10 +2,10 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
-  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository, SelectQueryBuilder } from 'typeorm';
 import { Dashboard, Privacidade } from 'src/database/entities/Dashboards';
 import { Usuario } from 'src/database/entities/Usuarios';
@@ -46,9 +46,9 @@ export interface DashboardFilters {
 @Injectable()
 export class DashboardService {
   constructor(
-    @Inject('DASHBOARD_REPOSITORY')
+    @InjectRepository(Dashboard)
     private dashboardRepository: Repository<Dashboard>,
-    @Inject('USER_REPOSITORY')
+    @InjectRepository(Usuario)
     private userRepository: Repository<Usuario>,
   ) {}
 

@@ -16,6 +16,8 @@ import {
   findIncompatiblePermissions,
 } from 'src/shared/services/RolePermissionPolicy';
 import { logger } from 'src/shared/services/Logger';
+import type { UserRequest } from 'src/shared/interfaces/UserRequest';
+import type { Usuario } from 'src/database/entities/Usuarios';
 
 @Injectable()
 export class AuthorizationGuard implements CanActivate {
@@ -31,29 +33,56 @@ export class AuthorizationGuard implements CanActivate {
         [context.getHandler(), context.getClass()],
       );
 
-    if (!authorization) {
+    if (!authorization?.requirements?.length) {
       return true;
     }
 
-    const request = context.switchToHttp().getRequest();
-
+    const request = context.switchToHttp().getRequest<UserRequest>();
     const user = request.user;
 
     if (!user) {
       throw new ForbiddenException('User not found in request');
     }
 
-    const { type, required } = authorization;
+    for (const requirement of authorization.requirements) {
+      const allowed =
+        requirement.type === 'role'
+          ? await this.validateRoles(
+              user.email,
+              requirement.required,
+              request.authUser,
+            )
+          : await this.validatePermissions(
+              user.email,
+              requirement.required,
+              request.authUser,
+            );
 
-    if (type === 'role') {
-      return await this.validateRoles(user, required);
+      if (!allowed) {
+        return false;
+      }
     }
 
-    return this.validatePermissions(user, required);
+    return true;
   }
 
-  private async validateRoles(user: any, required: string[]): Promise<boolean> {
-    const userFound = await this.usersService.findOne(user?.email || '');
+  private async resolveAuthUser(
+    email: string,
+    cached?: Usuario,
+  ): Promise<Usuario | undefined> {
+    if (cached) {
+      return cached;
+    }
+
+    return this.usersService.findOne(email);
+  }
+
+  private async validateRoles(
+    email: string,
+    required: string[],
+    cached?: Usuario,
+  ): Promise<boolean> {
+    const userFound = await this.resolveAuthUser(email, cached);
 
     const userRoles = userFound?.regra.map((regra) => regra.nome);
 
@@ -79,10 +108,11 @@ export class AuthorizationGuard implements CanActivate {
   }
 
   private async validatePermissions(
-    user: any,
+    email: string,
     required: string[],
+    cached?: Usuario,
   ): Promise<boolean> {
-    const userFound = await this.usersService.findOne(user?.email || '');
+    const userFound = await this.resolveAuthUser(email, cached);
 
     const isAdmin = userFound?.regra.some(
       (regra) => regra.nome === ADMIN_ROLE_NAME,
@@ -99,7 +129,7 @@ export class AuthorizationGuard implements CanActivate {
 
     if (incompatible.length > 0) {
       logger.warn('User has permissions incompatible with assigned roles', {
-        email: user?.email,
+        email,
         incompatible,
       });
     }

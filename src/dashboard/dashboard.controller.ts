@@ -11,6 +11,7 @@ import {
   Query,
   Request,
   Res,
+  UnauthorizedException,
 } from '@nestjs/common';
 import type { Response } from 'express';
 
@@ -26,23 +27,35 @@ import {
 import { assignUsersSchema, type AssignUsersDto } from './dto/assign-users.dto';
 import { ZodValidation } from 'src/shared/decorators/zod-validation.decorator';
 import { Public } from 'src/shared/decorators/auth-public.decorator';
-import { Authorization } from 'src/shared/decorators/authorization.decorator';
+import { Authorization, AuthorizationAll } from 'src/shared/decorators/authorization.decorator';
 import * as UserRequest from 'src/shared/interfaces/UserRequest';
-import { parsePagination, setTotalCount } from 'src/shared/dto/pagination.dto';
+import { ZodQueryValidation } from 'src/shared/decorators/zod-validation.decorator';
+import { setTotalCount } from 'src/shared/dto/pagination.dto';
+import {
+  dashboardPrivateQuerySchema,
+  dashboardPublicQuerySchema,
+  dashboardQuerySchema,
+  type DashboardPrivateQueryDto,
+  type DashboardPublicQueryDto,
+  type DashboardQueryDto,
+} from './dto/dashboard-query.dto';
 
 @Controller('dashboards')
 export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}
 
   @Post('/')
-  @Authorization('permission', ['PERMISSAO_CRIAR_DASHBOARD'])
+  @AuthorizationAll(
+    { type: 'role', required: ['REGRA_DASHBOARD'] },
+    { type: 'permission', required: ['PERMISSAO_CRIAR_DASHBOARD'] },
+  )
   @ZodValidation(createDashboardSchema)
   async create(
     @Body() dto: CreateDashboardDto,
     @Request() req: UserRequest.UserRequest,
   ) {
     if (!req.user) {
-      throw new Error('User information is missing in the request');
+      throw new UnauthorizedException();
     }
 
     return this.dashboardService.create(dto, req.user);
@@ -50,21 +63,23 @@ export class DashboardController {
 
   @Get('/')
   @Authorization('role', ['REGRA_DASHBOARD'])
+  @ZodQueryValidation(dashboardQuerySchema)
   async findAll(
-    @Query() query: Record<string, string>,
+    @Query() query: DashboardQueryDto,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const { page, limit } = parsePagination(query, { defaultLimit: 4 });
+    const { page, limit, nome, id_criador, visivel, privacidade, temporario, expiracao } =
+      query;
 
     const params: DashboardListParams = {
       page,
       limit,
-      nome: query.nome,
-      id_criador: query.id_criador,
-      visivel: query.visivel,
-      privacidade: query.privacidade,
-      temporario: query.temporario,
-      expiracao: query.expiracao,
+      nome,
+      id_criador,
+      visivel,
+      privacidade,
+      temporario,
+      expiracao,
     };
 
     const { data, total } = await this.dashboardService.findAllPaginated(
@@ -77,43 +92,45 @@ export class DashboardController {
   }
 
   @Get('/private')
+  @ZodQueryValidation(dashboardPrivateQuerySchema)
   async findAllPrivate(
-    @Query() query: Record<string, string>,
+    @Query() query: DashboardPrivateQueryDto,
     @Request() req: UserRequest.UserRequest,
     @Res({ passthrough: true }) response: Response,
   ) {
     if (!req.user) {
-      throw new Error('User information is missing in the request');
+      throw new UnauthorizedException();
     }
 
-    const { page, limit } = parsePagination(query, { defaultLimit: 4 });
+    const { page, limit, nome, favoritos } = query;
 
-    const { data, total, favoritos } =
+    const { data, total, favoritos: favoriteIds } =
       await this.dashboardService.findAllPrivate(
         req.user.sub,
         page,
         limit,
-        query.nome,
-        query.favoritos === 'true',
+        nome,
+        favoritos,
       );
 
     setTotalCount(response, total);
 
-    return { data, favoritos };
+    return { data, favoritos: favoriteIds };
   }
 
   @Public()
   @Get('/public')
+  @ZodQueryValidation(dashboardPublicQuerySchema)
   async findAllPublic(
-    @Query() query: Record<string, string>,
+    @Query() query: DashboardPublicQueryDto,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const { page, limit } = parsePagination(query, { defaultLimit: 4 });
+    const { page, limit, nome } = query;
 
     const { data, total } = await this.dashboardService.findAllPublic(
       page,
       limit,
-      query.nome,
+      nome,
     );
 
     setTotalCount(response, total);
@@ -123,18 +140,20 @@ export class DashboardController {
 
   @Get('/filters')
   @Authorization('role', ['REGRA_DASHBOARD'])
-  async getFilters(@Query() query: Record<string, string>) {
-    const { page, limit } = parsePagination(query, { defaultLimit: 4 });
+  @ZodQueryValidation(dashboardQuerySchema)
+  async getFilters(@Query() query: DashboardQueryDto) {
+    const { page, limit, nome, id_criador, visivel, privacidade, temporario, expiracao } =
+      query;
 
     const params: DashboardListParams = {
       page,
       limit,
-      nome: query.nome,
-      id_criador: query.id_criador,
-      visivel: query.visivel,
-      privacidade: query.privacidade,
-      temporario: query.temporario,
-      expiracao: query.expiracao,
+      nome,
+      id_criador,
+      visivel,
+      privacidade,
+      temporario,
+      expiracao,
     };
 
     return this.dashboardService.getFilters(params);
@@ -152,7 +171,7 @@ export class DashboardController {
     @Request() req: UserRequest.UserRequest,
   ) {
     if (!req.user) {
-      throw new Error('User information is missing in the request');
+      throw new UnauthorizedException();
     }
 
     return this.dashboardService.findPrivateById(id, req.user.sub);
@@ -165,7 +184,7 @@ export class DashboardController {
     @Request() req: UserRequest.UserRequest,
   ) {
     if (!req.user) {
-      throw new Error('User information is missing in the request');
+      throw new UnauthorizedException();
     }
 
     return this.dashboardService.findById(id, req.user.sub);
@@ -191,7 +210,7 @@ export class DashboardController {
     @Request() req: UserRequest.UserRequest,
   ) {
     if (!req.user) {
-      throw new Error('User information is missing in the request');
+      throw new UnauthorizedException();
     }
 
     return this.dashboardService.update(id, dto, req.user);

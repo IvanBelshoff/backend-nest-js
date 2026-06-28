@@ -1,11 +1,10 @@
 import {
   BadRequestException,
   ForbiddenException,
-  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import 'dotenv/config';
+import { InjectRepository } from '@nestjs/typeorm';
 import { Usuario } from 'src/database/entities/Usuarios';
 import { In, Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
@@ -34,15 +33,15 @@ export interface UsuariosByDashboard {
 @Injectable()
 export class UsersService {
   constructor(
-    @Inject('USER_REPOSITORY')
+    @InjectRepository(Usuario)
     private userRepository: Repository<Usuario>,
-    @Inject('FOTO_REPOSITORY')
+    @InjectRepository(Foto)
     private fotoRepository: Repository<Foto>,
-    @Inject('REGRA_REPOSITORY')
+    @InjectRepository(Regra)
     private regraRepository: Repository<Regra>,
-    @Inject('PERMISSAO_REPOSITORY')
+    @InjectRepository(Permissao)
     private permissaoRepository: Repository<Permissao>,
-    @Inject('DASHBOARD_REPOSITORY')
+    @InjectRepository(Dashboard)
     private dashboardRepository: Repository<Dashboard>,
   ) {}
 
