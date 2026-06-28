@@ -30,6 +30,10 @@ export const envSchema = z.object({
     .optional()
     .transform((value) => value === 'true'),
   REGRAS_PERMISSOES: z.string().optional(),
+  SWAGGER_ENABLED: z
+    .string()
+    .optional()
+    .transform((value) => value === 'true'),
 });
 
 export type Env = z.infer<typeof envSchema>;

@@ -22,7 +22,7 @@ export const AUTH_ENDPOINT_MATRIX = {
     'PATCH /user/password/:id': { self: true },
     'PATCH /user/:id': { permission: ['PERMISSAO_ATUALIZAR_USUARIO'] },
     'DELETE /user/photo/:id': { self: true },
-    'DELETE /user/:id': { permission: ['PERMISSAO_DELETAR_USUARIO'] },
+    'DELETE /user/:id': { permission: ['PERMISSAO_EXCLUIR_USUARIO'] },
   },
   dashboards: {
     'POST /dashboards': {
@@ -39,7 +39,7 @@ export const AUTH_ENDPOINT_MATRIX = {
       permission: ['PERMISSAO_ATUALIZAR_DASHBOARD'],
     },
     'DELETE /dashboards/:id': {
-      permission: ['PERMISSAO_DELETAR_DASHBOARD'],
+      permission: ['PERMISSAO_EXCLUIR_DASHBOARD'],
     },
   },
 } as const;

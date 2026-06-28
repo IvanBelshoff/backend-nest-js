@@ -57,8 +57,16 @@ import {
 import { ZodQueryValidation } from 'src/shared/decorators/zod-validation.decorator';
 import { setTotalCount } from 'src/shared/dto/pagination.dto';
 import { userQuerySchema, type UserQueryDto } from './dto/user-query.dto';
+import {
+  ApiBearerAuth,
+  ApiHeader,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 
 @Controller('user')
+@ApiTags('user')
+@ApiBearerAuth('access-token')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
@@ -81,6 +89,8 @@ export class UsersController {
   @Get('/')
   @Authorization('role', ['REGRA_USUARIO'])
   @ZodQueryValidation(userQuerySchema)
+  @ApiOperation({ summary: 'Lista usuários paginados (header x-total-count)' })
+  @ApiHeader({ name: 'x-total-count', description: 'Total de registros' })
   async findAll(
     @Query() query: UserQueryDto,
     @Res({ passthrough: true }) response: Response,
@@ -222,7 +232,7 @@ export class UsersController {
   }
 
   @Delete('/:id')
-  @Authorization('permission', ['PERMISSAO_DELETAR_USUARIO'])
+  @Authorization('permission', ['PERMISSAO_EXCLUIR_USUARIO'])
   @HttpCode(204)
   async delete(@Param('id', ParseIntPipe) id: number) {
     await this.usersService.delete(id);

@@ -10,6 +10,15 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiNoContentResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+  ApiUnauthorizedResponse,
+} from '@nestjs/swagger';
 import type { Response } from 'express';
 import { AuthService } from './auth.service';
 import { ZodValidation } from 'src/shared/decorators/zod-validation.decorator';
@@ -23,6 +32,7 @@ import {
 } from './utils/refresh-cookie.util';
 
 @Controller('auth')
+@ApiTags('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
@@ -30,6 +40,18 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @Throttle({ login: { limit: 5, ttl: 900_000 } })
   @Post('login')
+  @ApiOperation({ summary: 'Login com email e senha; define cookie de refresh' })
+  @ApiBody({
+    schema: {
+      example: { email: 'admin@silexcode.com', senha: 'Admin123' },
+    },
+  })
+  @ApiOkResponse({
+    schema: {
+      example: { access_token: 'jwt...', expires_in: 3600 },
+    },
+  })
+  @ApiUnauthorizedResponse()
   @ZodValidation(signinSchema)
   async signIn(
     @Body() dto: SigninDto,
@@ -52,6 +74,13 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @Throttle({ login: { limit: 5, ttl: 900_000 } })
   @Post('refresh')
+  @ApiOperation({ summary: 'Renova access token via cookie refresh_token' })
+  @ApiOkResponse({
+    schema: {
+      example: { access_token: 'jwt...', expires_in: 3600 },
+    },
+  })
+  @ApiUnauthorizedResponse()
   async refresh(
     @Request() req: UserRequest.UserRequest,
     @Res({ passthrough: true }) res: Response,
@@ -78,6 +107,8 @@ export class AuthController {
   @Public()
   @HttpCode(HttpStatus.NO_CONTENT)
   @Post('logout')
+  @ApiOperation({ summary: 'Revoga refresh token e limpa cookie' })
+  @ApiNoContentResponse()
   async logout(
     @Request() req: UserRequest.UserRequest,
     @Res({ passthrough: true }) res: Response,
@@ -88,6 +119,8 @@ export class AuthController {
   }
 
   @Get('profile')
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Retorna payload JWT do usuário autenticado' })
   getProfile(@Request() req: UserRequest.UserRequest) {
     if (!req.user) {
       return null;

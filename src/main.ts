@@ -6,6 +6,7 @@ import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { env } from './shared/env.schema';
 import { HttpExceptionFilter } from './shared/filters/http-exception.filter';
+import { setupSwagger } from './shared/swagger/setup-swagger';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -21,6 +22,7 @@ async function bootstrap() {
     credentials: true,
     exposedHeaders: ['x-total-count'],
   });
+  setupSwagger(app);
   await app.listen(env.PORT).then(() => {
     console.log(`Server is running on port ${env.PORT}`);
   });

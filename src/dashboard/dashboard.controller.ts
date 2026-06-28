@@ -39,8 +39,15 @@ import {
   type DashboardPublicQueryDto,
   type DashboardQueryDto,
 } from './dto/dashboard-query.dto';
+import {
+  ApiBearerAuth,
+  ApiHeader,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 
 @Controller('dashboards')
+@ApiTags('dashboards')
 export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}
 
@@ -49,6 +56,8 @@ export class DashboardController {
     { type: 'role', required: ['REGRA_DASHBOARD'] },
     { type: 'permission', required: ['PERMISSAO_CRIAR_DASHBOARD'] },
   )
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Cria dashboard' })
   @ZodValidation(createDashboardSchema)
   async create(
     @Body() dto: CreateDashboardDto,
@@ -63,6 +72,9 @@ export class DashboardController {
 
   @Get('/')
   @Authorization('role', ['REGRA_DASHBOARD'])
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Lista dashboards admin (header x-total-count)' })
+  @ApiHeader({ name: 'x-total-count', description: 'Total de registros' })
   @ZodQueryValidation(dashboardQuerySchema)
   async findAll(
     @Query() query: DashboardQueryDto,
@@ -217,7 +229,7 @@ export class DashboardController {
   }
 
   @Delete('/:id')
-  @Authorization('permission', ['PERMISSAO_DELETAR_DASHBOARD'])
+  @Authorization('permission', ['PERMISSAO_EXCLUIR_DASHBOARD'])
   @HttpCode(204)
   async delete(@Param('id', ParseIntPipe) id: number) {
     await this.dashboardService.delete(id);

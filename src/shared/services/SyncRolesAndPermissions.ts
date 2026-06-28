@@ -110,7 +110,7 @@ export class SyncRolesAndPermissions implements OnApplicationBootstrap {
 
     const novaRegra = regrasAdicionadas[0];
 
-    await this.permissionService.updateById(regraAtualizada.id, {
+    await this.roleService.updateById(regraAtualizada.id, {
       nome: novaRegra.nome,
       descricao: `Gerenciamento de ${this.extrairNomeEmMinusculo(novaRegra.nome)}`,
     });
@@ -255,6 +255,14 @@ export class SyncRolesAndPermissions implements OnApplicationBootstrap {
         continue;
       }
 
+      await this.roleRepository
+        .createQueryBuilder()
+        .relation(Regra, 'usuario')
+        .of(regraRemovida.id)
+        .set([]);
+
+      await this.roleService.delete(regraRemovida.id);
+
       logger.info('Role removed during sync', { roleName: regraRemovida.nome });
     }
 
@@ -276,7 +284,7 @@ export class SyncRolesAndPermissions implements OnApplicationBootstrap {
   };
 
   public async syncRolesAndPermissions() {
-    console.log('Sincronizando regras e permissões...');
+    logger.info('Syncing roles and permissions...');
 
     const regrasPermissoesEnv = this.loadRegrasPermissoesEnv();
 
