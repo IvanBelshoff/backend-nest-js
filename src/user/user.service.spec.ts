@@ -31,6 +31,7 @@ describe('UsersService', () => {
       ),
     };
     const userRepository = {
+      findOne: jest.fn().mockResolvedValue(undefined),
       manager: {
         transaction: jest
           .fn()
@@ -47,9 +48,15 @@ describe('UsersService', () => {
     const fotoRepository = {
       create: jest.fn().mockImplementation((foto) => foto),
     };
+    const regraRepository = {};
+    const permissaoRepository = {};
+    const dashboardRepository = {};
     const service = new UsersService(
       userRepository as any,
       fotoRepository as any,
+      regraRepository as any,
+      permissaoRepository as any,
+      dashboardRepository as any,
     );
 
     return {
@@ -68,12 +75,15 @@ describe('UsersService', () => {
       transactionUserRepository,
     } = buildServiceMocks();
 
-    const user = await service.create({
-      nome: 'Ivan',
-      sobrenome: 'Belshoff',
-      email: 'ivan@example.com',
-      senha: 'senha-segura',
-    });
+    const user = await service.create(
+      {
+        nome: 'Ivan',
+        sobrenome: 'Belshoff',
+        email: 'ivan@example.com',
+        senha: 'senha-segura',
+      },
+      { sub: 1, email: 'ivan@example.com', iat: 0, exp: 0 },
+    );
 
     const hashedPassword = transactionUserRepository.create.mock.calls[0][0]
       .senha;
@@ -131,6 +141,7 @@ describe('UsersService', () => {
         email: 'ivan@example.com',
         senha: 'senha-segura',
       },
+      { sub: 1, email: 'ivan@example.com', iat: 0, exp: 0 },
       foto,
     );
 

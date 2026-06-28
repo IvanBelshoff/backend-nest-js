@@ -2,11 +2,11 @@ import { z } from 'zod';
 
 export const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']),
-  HOST: z.string().min(1),
+  DB_HOST: z.string().min(1),
   DB_USER: z.string().min(1),
   DB_NAME: z.string().min(1),
   DB_PORT: z.coerce.number().int().positive(),
-  PASSWORD: z.string().min(1),
+  DB_PASS: z.string().min(1),
   JWT_SECRET: z.string().min(1),
   REFRESH_TOKEN_PEPPER: z.string().min(32),
   CORS_ORIGIN: z.string().min(1),
@@ -27,6 +27,7 @@ export const envSchema = z.object({
     .string()
     .optional()
     .transform((value) => value === 'true'),
+  REGRAS_PERMISSOES: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

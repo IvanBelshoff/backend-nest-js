@@ -1,6 +1,7 @@
 import { StreamableFile } from '@nestjs/common';
-import { IS_PUBLIC_KEY } from 'src/shared/decorators/public';
+import { IS_PUBLIC_KEY } from 'src/shared/decorators/auth-public.decorator';
 import { UsersController } from './user.controller';
+import type { UserRequest } from 'src/shared/interfaces/UserRequest';
 
 describe('UsersController', () => {
   it('passes the uploaded photo to the create service method', async () => {
@@ -18,6 +19,9 @@ describe('UsersController', () => {
       email: 'ivan@example.com',
       senha: 'senha-segura',
     };
+    const req = {
+      user: { sub: 1, email: 'ivan@example.com', iat: 0, exp: 0 },
+    } as UserRequest;
     const foto = {
       filename: 'foto-gerada.png',
       originalname: 'perfil.png',
@@ -26,9 +30,9 @@ describe('UsersController', () => {
       path: 'C:\\uploads\\foto-gerada.png',
     } as Express.Multer.File;
 
-    await controller.create(dto, foto);
+    await controller.create(dto, req, foto);
 
-    expect(usersService.create).toHaveBeenCalledWith(dto, foto);
+    expect(usersService.create).toHaveBeenCalledWith(dto, req.user, foto);
   });
 
   it('marks the user photo route as public', () => {

@@ -10,6 +10,7 @@ async function bootstrap() {
   app.enableCors({
     origin: env.CORS_ORIGIN,
     credentials: true,
+    exposedHeaders: ['x-total-count'],
   });
   await app.listen(process.env.PORT ?? 3000).then(() => {
     console.log(`Server is running on port ${process.env.PORT ?? 3000}`);

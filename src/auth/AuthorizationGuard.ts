@@ -10,6 +10,12 @@ import {
   AuthorizationMetadata,
 } from 'src/shared/decorators/authorization.decorator';
 import { UsersService } from 'src/user/user.service';
+import {
+  ADMIN_ROLE_NAME,
+  filterCompatiblePermissions,
+  findIncompatiblePermissions,
+} from 'src/shared/services/RolePermissionPolicy';
+import { logger } from 'src/shared/services/Logger';
 
 @Injectable()
 export class AuthorizationGuard implements CanActivate {
@@ -52,7 +58,7 @@ export class AuthorizationGuard implements CanActivate {
     const userRoles = userFound?.regra.map((regra) => regra.nome);
 
     const isAdmin = userFound?.regra.some(
-      (regra) => regra.nome === 'REGRA_ADMIN',
+      (regra) => regra.nome === ADMIN_ROLE_NAME,
     );
 
     if (isAdmin) {
@@ -79,18 +85,31 @@ export class AuthorizationGuard implements CanActivate {
     const userFound = await this.usersService.findOne(user?.email || '');
 
     const isAdmin = userFound?.regra.some(
-      (regra) => regra.nome === 'REGRA_ADMIN',
+      (regra) => regra.nome === ADMIN_ROLE_NAME,
     );
 
     if (isAdmin) {
       return true;
     }
 
-    const userPermissions = userFound?.permissao.map(
+    const regras = userFound?.regra ?? [];
+    const permissoes = userFound?.permissao ?? [];
+
+    const incompatible = findIncompatiblePermissions(regras, permissoes);
+
+    if (incompatible.length > 0) {
+      logger.warn('User has permissions incompatible with assigned roles', {
+        email: user?.email,
+        incompatible,
+      });
+    }
+
+    const compatiblePermissions = filterCompatiblePermissions(regras, permissoes);
+    const userPermissions = compatiblePermissions.map(
       (permissao) => permissao.nome,
     );
 
-    const hasRequiredPermission = userPermissions?.some((permission) =>
+    const hasRequiredPermission = userPermissions.some((permission) =>
       required.includes(String(permission)),
     );
 

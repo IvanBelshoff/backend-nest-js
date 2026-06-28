@@ -12,6 +12,7 @@ import {
 import { Foto } from './Fotos';
 import { Permissao } from './Permissoes';
 import { Regra } from './Regras';
+import { Dashboard } from './Dashboards';
 
 @Entity('usuarios')
 export class Usuario {
@@ -48,6 +49,9 @@ export class Usuario {
   @UpdateDateColumn({ nullable: false, type: 'timestamp' })
   data_atualizacao: Date;
 
+  @Column({ type: 'simple-array', nullable: true })
+  dashboards_favoritos: number[];
+
   @ManyToMany(() => Permissao, (permissao) => permissao.usuario, {
     cascade: true,
     onDelete: 'CASCADE',
@@ -71,6 +75,18 @@ export class Usuario {
     inverseJoinColumns: [{ name: 'regra_id' }],
   })
   regra: Regra[];
+
+  @ManyToMany(() => Dashboard, (dashboard) => dashboard.usuario, {
+    cascade: true,
+    onDelete: 'CASCADE',
+    onUpdate: 'SET NULL',
+  })
+  @JoinTable({
+    name: 'usuarios_dashboards',
+    joinColumns: [{ name: 'usuario_id' }],
+    inverseJoinColumns: [{ name: 'dashboard_id' }],
+  })
+  dashboard: Dashboard[];
 
   @OneToOne(() => Foto, (foto) => foto.usuario, {
     cascade: true,

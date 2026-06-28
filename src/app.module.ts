@@ -5,6 +5,8 @@ import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './auth/auth.module';
 import { RoleModule } from './role/role.module';
 import { PermissionModule } from './permission/permission.module';
+import { DashboardModule } from './dashboard/dashboard.module';
+import { IconModule } from './icon/icon.module';
 import { SyncRolesAndPermissions } from './shared/services/SyncRolesAndPermissions';
 import { DefaultUserService } from './shared/services/SeedDefaultUser';
 
@@ -16,6 +18,8 @@ import { DefaultUserService } from './shared/services/SeedDefaultUser';
     AuthModule,
     RoleModule,
     PermissionModule,
+    DashboardModule,
+    IconModule,
   ],
   providers: [SyncRolesAndPermissions, DefaultUserService],
 })

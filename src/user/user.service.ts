@@ -1,12 +1,36 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import 'dotenv/config';
 import { Usuario } from 'src/database/entities/Usuarios';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { Foto } from 'src/database/entities/Fotos';
+import { Regra } from 'src/database/entities/Regras';
+import { Permissao } from 'src/database/entities/Permissoes';
+import { Dashboard, Privacidade } from 'src/database/entities/Dashboards';
 import { existsSync, statSync, unlinkSync } from 'fs';
 import { isAbsolute, join } from 'path';
 import { env } from '../shared/env.schema';
+import { UpdateUserDto } from './dto/update-user.dto';
+import {
+  assertRolePermissionAssignment,
+} from '../shared/services/RolePermissionPolicy';
+
+export interface UserSummary {
+  id: number;
+  nome: string;
+}
+
+export interface UsuariosByDashboard {
+  usuarios: Usuario[];
+  usuariosDisponiveis: Omit<Usuario, 'dashboard'>[];
+}
+
 @Injectable()
 export class UsersService {
   constructor(
@@ -14,10 +38,496 @@ export class UsersService {
     private userRepository: Repository<Usuario>,
     @Inject('FOTO_REPOSITORY')
     private fotoRepository: Repository<Foto>,
+    @Inject('REGRA_REPOSITORY')
+    private regraRepository: Repository<Regra>,
+    @Inject('PERMISSAO_REPOSITORY')
+    private permissaoRepository: Repository<Permissao>,
+    @Inject('DASHBOARD_REPOSITORY')
+    private dashboardRepository: Repository<Dashboard>,
   ) {}
 
   async findAll(): Promise<Usuario[]> {
     return this.userRepository.find({ relations: { foto: true } });
+  }
+
+  async findAllPaginated(
+    page: number,
+    limit: number,
+    filter = '',
+  ): Promise<{ data: Omit<Usuario, 'senha'>[]; total: number }> {
+    const query = this.userRepository
+      .createQueryBuilder('usuario')
+      .leftJoinAndSelect('usuario.regra', 'regra')
+      .leftJoinAndSelect('usuario.permissao', 'permissao')
+      .leftJoinAndSelect('permissao.regra', 'permissao_regra')
+      .leftJoinAndSelect('usuario.foto', 'foto')
+      .where(
+        '(LOWER(usuario.nome) LIKE LOWER(:filter) OR LOWER(usuario.sobrenome) LIKE LOWER(:filter))',
+        { filter: `%${filter}%` },
+      )
+      .orderBy('usuario.id', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit);
+
+    const [usuarios, total] = await query.getManyAndCount();
+
+    const data = usuarios.map(({ senha: _senha, ...rest }) => rest);
+
+    return { data, total };
+  }
+
+  async getUserIds(excludeId?: number): Promise<UserSummary[]> {
+    const usuarios = await this.userRepository.find();
+
+    return usuarios
+      .filter(
+        (usuario) =>
+          usuario.bloqueado === false &&
+          (excludeId ? usuario.id !== excludeId : true),
+      )
+      .map((usuario) => ({
+        id: Number(usuario.id),
+        nome: `${usuario.nome} ${usuario.sobrenome}`,
+      }));
+  }
+
+  async findByIdWithRelations(id: number): Promise<Omit<Usuario, 'senha'>> {
+    const user = await this.userRepository.findOne({
+      where: { id },
+      relations: {
+        foto: true,
+        regra: true,
+        permissao: { regra: true },
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Usuário não localizado');
+    }
+
+    const { senha: _senha, ...rest } = user;
+    return rest;
+  }
+
+  async update(
+    id: number,
+    dto: UpdateUserDto,
+    requester: { sub: number; email: string },
+    foto?: Express.Multer.File,
+  ): Promise<Omit<Usuario, 'senha'>> {
+    const user = await this.userRepository.findOne({
+      where: { id },
+      relations: { foto: true },
+    });
+
+    if (!user) {
+      if (foto?.path && existsSync(foto.path)) {
+        unlinkSync(foto.path);
+      }
+      throw new NotFoundException('Usuário não localizado');
+    }
+
+    try {
+      const updated = await this.userRepository.manager.transaction(
+        async (manager) => {
+          const userRepository = manager.getRepository(Usuario);
+          const fotoRepository = manager.getRepository(Foto);
+
+          const requesterUser = await userRepository.findOne({
+            where: { id: requester.sub },
+          });
+
+          user.nome = dto.nome ?? user.nome;
+          user.sobrenome = dto.sobrenome ?? user.sobrenome;
+          user.email = dto.email ?? user.email;
+          user.bloqueado = dto.bloqueado ?? user.bloqueado;
+          user.usuario_atualizador = requesterUser
+            ? `${requesterUser.nome} ${requesterUser.sobrenome}`
+            : 'Sistema';
+
+          if (foto) {
+            const previousLocal = user.foto?.local;
+            const photoData = this.buildPhotoData(user.id, foto);
+
+            if (user.foto) {
+              Object.assign(user.foto, photoData);
+              user.foto = await fotoRepository.save(user.foto);
+            } else {
+              user.foto = await fotoRepository.save(
+                fotoRepository.create(photoData),
+              );
+            }
+
+            if (
+              previousLocal &&
+              previousLocal !== env.DEFAULT_PROFILE_PHOTO_LOCAL &&
+              existsSync(previousLocal)
+            ) {
+              unlinkSync(previousLocal);
+            }
+          }
+
+          return userRepository.save(user);
+        },
+      );
+
+      const { senha: _senha, ...rest } = updated;
+      return rest;
+    } catch (error) {
+      if (foto?.path && existsSync(foto.path)) {
+        unlinkSync(foto.path);
+      }
+      throw error;
+    }
+  }
+
+  async updatePassword(id: number, senha: string): Promise<void> {
+    const user = await this.userRepository.findOne({ where: { id } });
+
+    if (!user) {
+      throw new NotFoundException('Usuário não localizado');
+    }
+
+    const hashedPassword = await bcrypt.hash(
+      senha,
+      await bcrypt.genSalt(env.SALT_ROUNDS),
+    );
+
+    await this.userRepository.update(id, { senha: hashedPassword });
+  }
+
+  async updateRolesAndPermissions(
+    id: number,
+    regrasIds: number[],
+    permissoesIds: number[],
+  ): Promise<void> {
+    const user = await this.userRepository.findOne({
+      where: { id },
+      relations: { regra: true, permissao: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Usuário não localizado');
+    }
+
+    const regras = regrasIds.length
+      ? await this.regraRepository.find({
+          where: { id: In(regrasIds) },
+          relations: { permissao: true },
+        })
+      : [];
+
+    const permissoes = permissoesIds.length
+      ? await this.permissaoRepository.find({
+          where: { id: In(permissoesIds) },
+          relations: { regra: true },
+        })
+      : [];
+
+    assertRolePermissionAssignment(
+      regras,
+      permissoes,
+      regrasIds,
+      permissoesIds,
+      { userId: id, operation: 'updateRolesAndPermissions' },
+    );
+
+    user.regra = regras;
+    user.permissao = permissoes;
+
+    await this.userRepository.save(user);
+  }
+
+  async copyRolesAndPermissions(
+    idUsuario: number,
+    idCopiado: number,
+  ): Promise<void> {
+    if (idUsuario === idCopiado) {
+      throw new BadRequestException(
+        'Regras e permissões não podem ser copiadas para o mesmo usuário',
+      );
+    }
+
+    const target = await this.userRepository.findOne({
+      where: { id: idUsuario },
+    });
+
+    if (!target) {
+      throw new NotFoundException('Usuário não localizado');
+    }
+
+    const source = await this.userRepository.findOne({
+      where: { id: idCopiado },
+      relations: { regra: true, permissao: { regra: true } },
+    });
+
+    if (!source) {
+      throw new NotFoundException('Usuário copiado não localizado');
+    }
+
+    const sourceRegras = source.regra ?? [];
+    const sourcePermissoes = source.permissao ?? [];
+
+    assertRolePermissionAssignment(
+      sourceRegras,
+      sourcePermissoes,
+      sourceRegras.map((regra) => Number(regra.id)),
+      sourcePermissoes.map((permissao) => Number(permissao.id)),
+      {
+        userId: idUsuario,
+        operation: 'copyRolesAndPermissions',
+        sourceUserId: idCopiado,
+      },
+    );
+
+    target.regra = sourceRegras;
+    target.permissao = sourcePermissoes;
+
+    await this.userRepository.save(target);
+  }
+
+  async deletePhoto(id: number): Promise<void> {
+    const user = await this.userRepository.findOne({
+      where: { id },
+      relations: { foto: true },
+    });
+
+    if (!user?.foto) {
+      throw new NotFoundException('Foto não localizada');
+    }
+
+    const previousLocal = user.foto.local;
+
+    Object.assign(user.foto, this.buildPhotoData(user.id));
+
+    await this.fotoRepository.save(user.foto);
+
+    if (
+      previousLocal &&
+      previousLocal !== env.DEFAULT_PROFILE_PHOTO_LOCAL &&
+      existsSync(previousLocal)
+    ) {
+      unlinkSync(previousLocal);
+    }
+  }
+
+  async delete(id: number): Promise<void> {
+    const user = await this.userRepository.findOne({
+      where: { id },
+      relations: { foto: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Usuário não localizado');
+    }
+
+    const fotoId = user.foto?.id;
+    const fotoLocal = user.foto?.local;
+
+    await this.userRepository.manager.transaction(async (manager) => {
+      await manager.getRepository(Usuario).delete(id);
+
+      if (fotoId) {
+        await manager.getRepository(Foto).delete(fotoId);
+      }
+    });
+
+    if (
+      fotoLocal &&
+      fotoLocal !== env.DEFAULT_PROFILE_PHOTO_LOCAL &&
+      existsSync(fotoLocal)
+    ) {
+      unlinkSync(fotoLocal);
+    }
+  }
+
+  async copyDashboards(idUsuario: number, idCopiado: number): Promise<void> {
+    if (idUsuario === idCopiado) {
+      throw new BadRequestException(
+        'Dashboards não podem ser copiados para o mesmo usuário',
+      );
+    }
+
+    const target = await this.userRepository.findOne({
+      where: { id: idUsuario },
+    });
+
+    if (!target) {
+      throw new NotFoundException('Usuário não localizado');
+    }
+
+    const source = await this.userRepository.findOne({
+      where: { id: idCopiado },
+      relations: { dashboard: true },
+    });
+
+    if (!source) {
+      throw new NotFoundException('Usuário copiado não localizado');
+    }
+
+    target.dashboard = source.dashboard ?? [];
+
+    await this.userRepository.save(target);
+  }
+
+  async updateFavorites(id: number, favoritos: number[]): Promise<void> {
+    const user = await this.userRepository.findOne({
+      where: { id },
+      relations: { dashboard: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Usuário não localizado');
+    }
+
+    const validatedIds: number[] = [];
+
+    for (const favoriteId of favoritos) {
+      const dashboard = await this.dashboardRepository.findOne({
+        where: { id: favoriteId },
+        relations: { usuario: true },
+      });
+
+      if (!dashboard) {
+        continue;
+      }
+
+      if (dashboard.privacidade === Privacidade.PRIVAT) {
+        const hasAccess =
+          dashboard.usuario?.some((usuario) => usuario.id === user.id) ||
+          dashboard.id_proprietario === Number(user.id);
+
+        if (!hasAccess) {
+          throw new ForbiddenException(
+            `Você não possui acesso ao ${dashboard.nome}`,
+          );
+        }
+      }
+
+      validatedIds.push(dashboard.id);
+    }
+
+    user.dashboards_favoritos = validatedIds;
+
+    await this.userRepository.save(user);
+  }
+
+  async assignDashboards(id: number, dashboards: number[]): Promise<void> {
+    await this.userRepository.manager.transaction(async (manager) => {
+      const userRepository = manager.getRepository(Usuario);
+      const dashboardRepository = manager.getRepository(Dashboard);
+
+      const user = await userRepository.findOne({
+        where: { id },
+        relations: { dashboard: true },
+      });
+
+      if (!user) {
+        throw new NotFoundException('Usuário não localizado');
+      }
+
+      if (user.bloqueado) {
+        throw new BadRequestException(
+          'Operação não permitida pois o usuário está bloqueado',
+        );
+      }
+
+      const dashboardEntities = dashboards.length
+        ? await dashboardRepository.find({ where: { id: In(dashboards) } })
+        : [];
+
+      if (dashboardEntities.length !== dashboards.length) {
+        throw new BadRequestException('Algum dashboard não foi encontrado.');
+      }
+
+      const publicNotOwned = dashboardEntities.find(
+        (dashboard) =>
+          dashboard.id_proprietario != null &&
+          dashboard.id_proprietario !== Number(user.id) &&
+          dashboard.privacidade === Privacidade.PUBLIC,
+      );
+
+      if (publicNotOwned) {
+        throw new BadRequestException(
+          `Dashboard ${publicNotOwned.nome} está público`,
+        );
+      }
+
+      const owned = await dashboardRepository.find({
+        where: { id_proprietario: Number(user.id) },
+      });
+
+      const missingOwned = owned.filter(
+        (dashboard) => !dashboards.includes(Number(dashboard.id)),
+      );
+
+      if (missingOwned.length > 0) {
+        throw new BadRequestException(
+          `Alguns dashboards que o usuário ${user.nome} ${user.sobrenome} é proprietário não foram listados`,
+        );
+      }
+
+      user.dashboard = dashboardEntities;
+
+      if (user.dashboards_favoritos?.length) {
+        const assignedIds = dashboardEntities.map((dashboard) => dashboard.id);
+        user.dashboards_favoritos = user.dashboards_favoritos.filter(
+          (favoriteId) => assignedIds.includes(favoriteId),
+        );
+      }
+
+      await userRepository.save(user);
+    });
+  }
+
+  async getUsersByDashboard(
+    dashboardId: number,
+  ): Promise<UsuariosByDashboard> {
+    const dashboard = await this.dashboardRepository.findOne({
+      where: { id: dashboardId },
+    });
+
+    if (!dashboard) {
+      throw new NotFoundException('Dashboard não localizado');
+    }
+
+    const usuarios = await this.userRepository.find({
+      relations: { foto: true },
+      where: { dashboard: { id: dashboardId } },
+      order: { nome: 'ASC' },
+    });
+
+    const todosUsuarios = await this.userRepository.find({
+      relations: { dashboard: true, foto: true },
+    });
+
+    const disponiveis = todosUsuarios
+      .filter(
+        (usuario) =>
+          !usuarios.some((associado) => associado.id === usuario.id) &&
+          !usuario.bloqueado,
+      )
+      .map(({ dashboard: _dashboard, ...rest }) => rest);
+
+    return {
+      usuarios: usuarios.filter((usuario) => !usuario.bloqueado),
+      usuariosDisponiveis:
+        dashboard.privacidade === Privacidade.PUBLIC ? [] : disponiveis,
+    };
+  }
+
+  async findOne(email: string): Promise<Usuario | undefined> {
+    const user =
+      (await this.userRepository.findOne({
+        where: { email },
+        relations: {
+          foto: true,
+          regra: true,
+          permissao: { regra: true },
+        },
+      })) || undefined;
+
+    return user;
   }
 
   async create(
@@ -76,20 +586,6 @@ export class UsersService {
 
       throw error;
     }
-  }
-
-  async findOne(email: string): Promise<Usuario | undefined> {
-    const user =
-      (await this.userRepository.findOne({
-        where: { email },
-        relations: {
-          foto: true,
-          regra: true,
-          permissao: true,
-        },
-      })) || undefined;
-
-    return user;
   }
 
   async findById(id: number): Promise<Usuario | undefined> {
