@@ -29,6 +29,15 @@ export const envSchema = z.object({
     .string()
     .optional()
     .transform((value) => value === 'true'),
+  SEED_DASHBOARDS_ON_STARTUP: z
+    .string()
+    .optional()
+    .transform((value) => value === 'true'),
+  SEED_USERS_ON_STARTUP: z
+    .string()
+    .optional()
+    .transform((value) => value === 'true'),
+  SENHA_USER_SEED_DEFAULT: z.string().min(1).default('SeedUser123'),
   REGRAS_PERMISSOES: z.string().optional(),
   SWAGGER_ENABLED: z
     .string()

@@ -267,7 +267,7 @@ export class DashboardService {
 
     const dashboard = await this.dashboardRepository.findOne({
       where: { id },
-      relations: { usuario: true },
+      relations: { usuario: { foto: true } },
     });
 
     if (!dashboard) {
@@ -316,7 +316,7 @@ export class DashboardService {
 
     const dashboard = await this.dashboardRepository.findOne({
       where: { id },
-      relations: { usuario: true },
+      relations: { usuario: { foto: true } },
     });
 
     if (!dashboard) {
@@ -433,7 +433,7 @@ export class DashboardService {
 
       const dashboard = await dashboardRepository.findOne({
         where: { id: dashboardId },
-        relations: { usuario: true },
+        relations: { usuario: { foto: true } },
       });
 
       if (!dashboard) {
@@ -488,7 +488,7 @@ export class DashboardService {
 
       const dashboard = await dashboardRepository.findOne({
         where: { id },
-        relations: { usuario: true },
+        relations: { usuario: { foto: true } },
       });
 
       if (!dashboard) {

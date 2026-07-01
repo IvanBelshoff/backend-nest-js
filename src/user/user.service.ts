@@ -615,6 +615,17 @@ export class UsersService {
     const photoPath = this.resolvePhotoPath(user.foto.local);
 
     if (!existsSync(photoPath)) {
+      const defaultPhotoPath = this.resolvePhotoPath(
+        env.DEFAULT_PROFILE_PHOTO_LOCAL,
+      );
+
+      if (existsSync(defaultPhotoPath)) {
+        return {
+          path: defaultPhotoPath,
+          type: env.DEFAULT_PROFILE_PHOTO_TYPE,
+        };
+      }
+
       throw new NotFoundException('Arquivo da foto não encontrado');
     }
 

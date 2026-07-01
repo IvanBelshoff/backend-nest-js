@@ -47,6 +47,7 @@ import {
 } from './dto/assign-dashboards.dto';
 import { ZodValidation } from 'src/shared/decorators/zod-validation.decorator';
 import { Public } from 'src/shared/decorators/auth-public.decorator';
+import { SkipThrottle } from '@nestjs/throttler';
 import { UploadPhoto } from 'src/shared/decorators/upload-photo.decorator';
 import * as UserRequest from 'src/shared/interfaces/UserRequest';
 import { Authorization } from 'src/shared/decorators/authorization.decorator';
@@ -129,6 +130,7 @@ export class UsersController {
   }
 
   @Public()
+  @SkipThrottle()
   @Get('/:id/foto')
   async findPhoto(
     @Param('id', ParseIntPipe) id: number,
