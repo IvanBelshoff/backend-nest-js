@@ -28,6 +28,15 @@ export interface DashboardListParams {
   expiracao?: string;
 }
 
+export interface UserPrivateListParams {
+  page: number;
+  limit: number;
+  nome?: string;
+  favoritos?: boolean;
+  privacidade?: 'privado' | 'publico';
+  temporario?: boolean;
+}
+
 export interface DashboardFilters {
   nomes: string[];
   nomesCount: number;
@@ -121,10 +130,7 @@ export class DashboardService {
 
   async findAllPrivate(
     userId: number,
-    page: number,
-    limit: number,
-    nome?: string,
-    favoritos?: boolean,
+    params: UserPrivateListParams,
   ): Promise<{ data: Dashboard[]; total: number; favoritos: number[] }> {
     const user = await this.userRepository.findOne({ where: { id: userId } });
 
@@ -134,18 +140,26 @@ export class DashboardService {
 
     const query = this.baseQuery();
 
-    this.applyPrivateAccessRules(query, userId);
+    this.applyMyDashboardsAccessRules(query, userId);
 
-    if (favoritos) {
+    if (params.favoritos) {
       const favoriteIds = user.dashboards_favoritos?.length
         ? user.dashboards_favoritos.map((id) => Number(id))
         : [0];
       query.andWhere('dashboard.id IN (:...favoriteIds)', { favoriteIds });
     }
 
-    this.applyNameFilter(query, nome);
+    this.applyNameFilter(query, params.nome);
 
-    query.skip((page - 1) * limit).take(limit);
+    if (params.privacidade) {
+      this.applyPrivacyFilter(query, params.privacidade);
+    }
+
+    if (typeof params.temporario === 'boolean') {
+      this.applyTemporaryFilter(query, params.temporario ? 'sim' : 'nao');
+    }
+
+    query.skip((params.page - 1) * params.limit).take(params.limit);
 
     const [data, total] = await query.getManyAndCount();
 
@@ -696,6 +710,32 @@ export class DashboardService {
         );
         break;
     }
+  }
+
+  private applyMyDashboardsAccessRules(
+    query: SelectQueryBuilder<Dashboard>,
+    userId: number,
+  ): void {
+    const now = new Date();
+
+    query
+      .distinct(true)
+      .where('dashboard.visivel = :visivel', { visivel: true })
+      .andWhere(
+        '(dashboard.temporario = false OR (dashboard.temporario = true AND :now >= dashboard.data_expiracao_inicial AND :now <= dashboard.data_expiracao_final))',
+        { now },
+      )
+      .andWhere(
+        `(
+          dashboard.privacidade = :publico
+          OR (dashboard.privacidade = :privado AND usuario.id = :userId)
+        )`,
+        {
+          publico: Privacidade.PUBLIC,
+          privado: Privacidade.PRIVAT,
+          userId,
+        },
+      );
   }
 
   private applyPrivateAccessRules(

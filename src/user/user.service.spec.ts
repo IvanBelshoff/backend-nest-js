@@ -167,4 +167,118 @@ describe('UsersService', () => {
       }),
     );
   });
+
+  describe('findAllPaginated', () => {
+    function buildListQueryMocks() {
+      const queryBuilder = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getManyAndCount: jest.fn().mockResolvedValue([
+          [
+            {
+              id: 1,
+              nome: 'Ivan',
+              sobrenome: 'Belshoff',
+              email: 'ivan@example.com',
+              senha: 'hashed',
+            },
+          ],
+          1,
+        ]),
+      };
+      const userRepository = {
+        createQueryBuilder: jest.fn().mockReturnValue(queryBuilder),
+      };
+      const service = new UsersService(
+        userRepository as any,
+        {} as any,
+        {} as any,
+        {} as any,
+        {} as any,
+      );
+
+      return { service, queryBuilder };
+    }
+
+    it('does not apply text filter when filter is empty', async () => {
+      const { service, queryBuilder } = buildListQueryMocks();
+
+      await service.findAllPaginated({ page: 1, limit: 10, filter: '' });
+
+      expect(queryBuilder.andWhere).not.toHaveBeenCalled();
+    });
+
+    it('applies text filter across nome, sobrenome, email, regra and permissao', async () => {
+      const { service, queryBuilder } = buildListQueryMocks();
+
+      await service.findAllPaginated({ page: 1, limit: 10, filter: 'admin' });
+
+      expect(queryBuilder.andWhere).toHaveBeenCalledWith(
+        expect.stringContaining('usuario.email'),
+        { textFilter: '%admin%' },
+      );
+    });
+
+    it('applies bloqueado filter when provided', async () => {
+      const { service, queryBuilder } = buildListQueryMocks();
+
+      await service.findAllPaginated({
+        page: 1,
+        limit: 10,
+        bloqueado: true,
+      });
+
+      expect(queryBuilder.andWhere).toHaveBeenCalledWith(
+        'usuario.bloqueado = :bloqueado',
+        { bloqueado: true },
+      );
+    });
+
+    it('applies regra filter when provided', async () => {
+      const { service, queryBuilder } = buildListQueryMocks();
+
+      await service.findAllPaginated({
+        page: 1,
+        limit: 10,
+        regra: 'REGRA_USUARIO',
+      });
+
+      expect(queryBuilder.andWhere).toHaveBeenCalledWith(
+        expect.stringContaining('regra_exact.nome = :regraNome'),
+        { regraNome: 'REGRA_USUARIO' },
+      );
+    });
+
+    it('applies permissao filter when provided', async () => {
+      const { service, queryBuilder } = buildListQueryMocks();
+
+      await service.findAllPaginated({
+        page: 1,
+        limit: 10,
+        permissao: 'PERMISSAO_CRIAR_USUARIO',
+      });
+
+      expect(queryBuilder.andWhere).toHaveBeenCalledWith(
+        expect.stringContaining('permissao_exact.nome = :permissaoNome'),
+        { permissaoNome: 'PERMISSAO_CRIAR_USUARIO' },
+      );
+    });
+
+    it('returns users without password', async () => {
+      const { service } = buildListQueryMocks();
+
+      const result = await service.findAllPaginated({ page: 1, limit: 10 });
+
+      expect(result.total).toBe(1);
+      expect(result.data[0]).not.toHaveProperty('senha');
+      expect(result.data[0]).toMatchObject({
+        id: 1,
+        nome: 'Ivan',
+        email: 'ivan@example.com',
+      });
+    });
+  });
 });

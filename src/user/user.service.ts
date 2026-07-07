@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Usuario } from 'src/database/entities/Usuarios';
-import { In, Repository } from 'typeorm';
+import { In, Repository, SelectQueryBuilder } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { Foto } from 'src/database/entities/Fotos';
 import { Regra } from 'src/database/entities/Regras';
@@ -19,6 +19,15 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import {
   assertRolePermissionAssignment,
 } from '../shared/services/RolePermissionPolicy';
+
+export interface UserListParams {
+  page: number;
+  limit: number;
+  filter?: string;
+  bloqueado?: boolean;
+  regra?: string;
+  permissao?: string;
+}
 
 export interface UserSummary {
   id: number;
@@ -50,9 +59,7 @@ export class UsersService {
   }
 
   async findAllPaginated(
-    page: number,
-    limit: number,
-    filter = '',
+    params: UserListParams,
   ): Promise<{ data: Omit<Usuario, 'senha'>[]; total: number }> {
     const query = this.userRepository
       .createQueryBuilder('usuario')
@@ -60,19 +67,105 @@ export class UsersService {
       .leftJoinAndSelect('usuario.permissao', 'permissao')
       .leftJoinAndSelect('permissao.regra', 'permissao_regra')
       .leftJoinAndSelect('usuario.foto', 'foto')
-      .where(
-        '(LOWER(usuario.nome) LIKE LOWER(:filter) OR LOWER(usuario.sobrenome) LIKE LOWER(:filter))',
-        { filter: `%${filter}%` },
-      )
       .orderBy('usuario.id', 'DESC')
-      .skip((page - 1) * limit)
-      .take(limit);
+      .skip((params.page - 1) * params.limit)
+      .take(params.limit);
+
+    this.applyTextFilter(query, params.filter);
+    this.applyBlockedFilter(query, params.bloqueado);
+    this.applyRoleFilter(query, params.regra);
+    this.applyPermissionFilter(query, params.permissao);
 
     const [usuarios, total] = await query.getManyAndCount();
 
     const data = usuarios.map(({ senha: _senha, ...rest }) => rest);
 
     return { data, total };
+  }
+
+  private applyTextFilter(
+    query: SelectQueryBuilder<Usuario>,
+    filter?: string,
+  ): void {
+    if (typeof filter !== 'string' || filter.trim().length === 0) {
+      return;
+    }
+
+    const normalizedFilter = `%${filter.trim()}%`;
+
+    query.andWhere(
+      `(
+        LOWER(usuario.nome) LIKE LOWER(:textFilter)
+        OR LOWER(usuario.sobrenome) LIKE LOWER(:textFilter)
+        OR LOWER(usuario.email) LIKE LOWER(:textFilter)
+        OR EXISTS (
+          SELECT 1
+          FROM usuarios_regras usuario_regra_filter
+          INNER JOIN regras regra_filter ON regra_filter.id = usuario_regra_filter.regra_id
+          WHERE usuario_regra_filter.usuario_id = usuario.id
+            AND LOWER(regra_filter.nome) LIKE LOWER(:textFilter)
+        )
+        OR EXISTS (
+          SELECT 1
+          FROM usuarios_permissoes usuario_permissao_filter
+          INNER JOIN permissoes permissao_filter ON permissao_filter.id = usuario_permissao_filter.permissao_id
+          WHERE usuario_permissao_filter.usuario_id = usuario.id
+            AND LOWER(permissao_filter.nome) LIKE LOWER(:textFilter)
+        )
+      )`,
+      { textFilter: normalizedFilter },
+    );
+  }
+
+  private applyBlockedFilter(
+    query: SelectQueryBuilder<Usuario>,
+    bloqueado?: boolean,
+  ): void {
+    if (typeof bloqueado !== 'boolean') {
+      return;
+    }
+
+    query.andWhere('usuario.bloqueado = :bloqueado', { bloqueado });
+  }
+
+  private applyRoleFilter(
+    query: SelectQueryBuilder<Usuario>,
+    regra?: string,
+  ): void {
+    if (typeof regra !== 'string' || regra.trim().length === 0) {
+      return;
+    }
+
+    query.andWhere(
+      `EXISTS (
+        SELECT 1
+        FROM usuarios_regras usuario_regra_exact
+        INNER JOIN regras regra_exact ON regra_exact.id = usuario_regra_exact.regra_id
+        WHERE usuario_regra_exact.usuario_id = usuario.id
+          AND regra_exact.nome = :regraNome
+      )`,
+      { regraNome: regra.trim() },
+    );
+  }
+
+  private applyPermissionFilter(
+    query: SelectQueryBuilder<Usuario>,
+    permissao?: string,
+  ): void {
+    if (typeof permissao !== 'string' || permissao.trim().length === 0) {
+      return;
+    }
+
+    query.andWhere(
+      `EXISTS (
+        SELECT 1
+        FROM usuarios_permissoes usuario_permissao_exact
+        INNER JOIN permissoes permissao_exact ON permissao_exact.id = usuario_permissao_exact.permissao_id
+        WHERE usuario_permissao_exact.usuario_id = usuario.id
+          AND permissao_exact.nome = :permissaoNome
+      )`,
+      { permissaoNome: permissao.trim() },
+    );
   }
 
   async getUserIds(excludeId?: number): Promise<UserSummary[]> {

@@ -72,7 +72,10 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Post('/')
-  @Authorization('role', ['REGRA_ADMIN'])
+  @AuthorizationAll(
+    { type: 'role', required: ['REGRA_USUARIO'] },
+    { type: 'permission', required: ['PERMISSAO_CRIAR_USUARIO'] },
+  )
   @ZodValidation(createUserSchema)
   @UploadPhoto('foto')
   async create(
@@ -96,13 +99,16 @@ export class UsersController {
     @Query() query: UserQueryDto,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const { page, limit, filter } = query;
+    const { page, limit, filter, bloqueado, regra, permissao } = query;
 
-    const { data, total } = await this.usersService.findAllPaginated(
+    const { data, total } = await this.usersService.findAllPaginated({
       page,
       limit,
       filter,
-    );
+      bloqueado,
+      regra,
+      permissao,
+    });
 
     setTotalCount(response, total);
 
@@ -146,7 +152,10 @@ export class UsersController {
   }
 
   @Patch('/copy/authentication')
-  @Authorization('role', ['REGRA_ADMIN'])
+  @AuthorizationAll(
+    { type: 'role', required: ['REGRA_USUARIO'] },
+    { type: 'permission', required: ['PERMISSAO_CRIAR_USUARIO'] },
+  )
   @ZodValidation(copyAuthenticationSchema)
   async copyAuthentication(@Body() dto: CopyAuthenticationDto) {
     await this.usersService.copyRolesAndPermissions(
@@ -156,7 +165,10 @@ export class UsersController {
   }
 
   @Patch('/copy/dashboards')
-  @Authorization('role', ['REGRA_ADMIN'])
+  @AuthorizationAll(
+    { type: 'role', required: ['REGRA_USUARIO'] },
+    { type: 'permission', required: ['PERMISSAO_CRIAR_USUARIO'] },
+  )
   @ZodValidation(copyDashboardsSchema)
   @HttpCode(204)
   async copyDashboards(@Body() dto: CopyDashboardsDto) {

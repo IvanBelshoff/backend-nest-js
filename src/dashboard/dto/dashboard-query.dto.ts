@@ -22,6 +22,11 @@ export const dashboardPrivateQuerySchema = createPaginationSchema(4, 200).extend
     .enum(['true', 'false'])
     .optional()
     .transform((value) => value === 'true'),
+  privacidade: z.enum(['privado', 'publico']).optional(),
+  temporario: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((value) => value === 'true'),
 });
 
 export type DashboardPrivateQueryDto = z.infer<
