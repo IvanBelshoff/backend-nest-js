@@ -14,10 +14,17 @@ export const AUTH_ENDPOINT_MATRIX = {
     'GET /user/:id': { selfOrRole: ['REGRA_USUARIO'] },
     'PATCH /user/copy/authentication': { role: ['REGRA_ADMIN'] },
     'PATCH /user/copy/dashboards': { role: ['REGRA_ADMIN'] },
+    'PATCH /user/copy/relatorios': { role: ['REGRA_ADMIN'] },
+    'GET /user/relatorios/:id': { role: ['REGRA_RELATORIO'] },
     'PATCH /user/dashboards/favorites/:id': { self: true },
+    'PATCH /user/relatorios/favorites/:id': { self: true },
     'PATCH /user/dashboards/:id': {
       role: ['REGRA_USUARIO'],
       permission: ['PERMISSAO_CONCEDER_ACESSO_DASHBOARD'],
+    },
+    'PATCH /user/relatorios/:id': {
+      role: ['REGRA_USUARIO'],
+      permission: ['PERMISSAO_CONCEDER_ACESSO_RELATORIO'],
     },
     'PATCH /user/authentication/:id': { role: ['REGRA_ADMIN'] },
     'PATCH /user/password/:id': { self: true },
@@ -45,6 +52,42 @@ export const AUTH_ENDPOINT_MATRIX = {
     },
     'DELETE /dashboards/:id': {
       permission: ['PERMISSAO_EXCLUIR_DASHBOARD'],
+    },
+  },
+  conexoes: {
+    'POST /conexoes': {
+      role: ['REGRA_RELATORIO'],
+      permission: ['PERMISSAO_CRIAR_CONEXAO'],
+    },
+    'GET /conexoes': { role: ['REGRA_RELATORIO'] },
+    'GET /conexoes/:id': { role: ['REGRA_RELATORIO'] },
+    'PATCH /conexoes/:id': { permission: ['PERMISSAO_ATUALIZAR_CONEXAO'] },
+    'DELETE /conexoes/:id': { permission: ['PERMISSAO_EXCLUIR_CONEXAO'] },
+    'POST /conexoes/:id/testar': { role: ['REGRA_RELATORIO'] },
+  },
+  relatorios: {
+    'POST /relatorios': {
+      role: ['REGRA_RELATORIO'],
+      permission: ['PERMISSAO_CRIAR_RELATORIO'],
+    },
+    'GET /relatorios': { role: ['REGRA_RELATORIO'] },
+    'GET /relatorios/filters': { role: ['REGRA_RELATORIO'] },
+    'GET /relatorios/users/:id': {
+      role: ['REGRA_USUARIO'],
+      permission: ['PERMISSAO_CONCEDER_ACESSO_RELATORIO'],
+    },
+    'GET /relatorios/:id': { role: ['REGRA_RELATORIO'] },
+    'PATCH /relatorios/users/:id': {
+      permission: ['PERMISSAO_CONCEDER_ACESSO_RELATORIO'],
+    },
+    'PATCH /relatorios/:id': {
+      permission: ['PERMISSAO_ATUALIZAR_RELATORIO'],
+    },
+    'POST /relatorios/:id/snapshot/atualizar': {
+      permission: ['PERMISSAO_ATUALIZAR_RELATORIO'],
+    },
+    'DELETE /relatorios/:id': {
+      permission: ['PERMISSAO_EXCLUIR_RELATORIO'],
     },
   },
 } as const;

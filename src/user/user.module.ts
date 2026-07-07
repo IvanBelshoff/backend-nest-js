@@ -7,6 +7,7 @@ import { Foto } from '../database/entities/Fotos';
 import { Regra } from '../database/entities/Regras';
 import { Permissao } from '../database/entities/Permissoes';
 import { Dashboard } from '../database/entities/Dashboards';
+import { Relatorio } from '../database/entities/Relatorios';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { Dashboard } from '../database/entities/Dashboards';
       Regra,
       Permissao,
       Dashboard,
+      Relatorio,
     ]),
   ],
   controllers: [UsersController],

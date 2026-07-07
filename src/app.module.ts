@@ -4,20 +4,26 @@ import { APP_GUARD } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { UsersModule } from './user/user.module';
 import { DatabaseModule } from './database/database.module';
+import { MongodbModule } from './database/mongodb.module';
 import { AuthModule } from './auth/auth.module';
 import { RoleModule } from './role/role.module';
 import { PermissionModule } from './permission/permission.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { ConnectionModule } from './connection/connection.module';
+import { ReportModule } from './report/report.module';
 import { IconModule } from './icon/icon.module';
 import { SyncRolesAndPermissions } from './shared/services/SyncRolesAndPermissions';
 import { DefaultUserService } from './shared/services/SeedDefaultUser';
 import { SeedDashboardsService } from './shared/services/SeedDashboards';
+import { SeedRelatoriosService } from './shared/services/SeedRelatorios';
 import { SeedUsersService } from './shared/services/SeedUsers';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Permissao } from './database/entities/Permissoes';
 import { Regra } from './database/entities/Regras';
 import { Usuario } from './database/entities/Usuarios';
 import { Dashboard } from './database/entities/Dashboards';
+import { Conexao } from './database/entities/Conexoes';
+import { Relatorio } from './database/entities/Relatorios';
 import { env } from './shared/env.schema';
 
 const isThrottlingEnabled = env.NODE_ENV !== 'development';
@@ -36,17 +42,21 @@ const isThrottlingEnabled = env.NODE_ENV !== 'development';
       : []),
     UsersModule,
     DatabaseModule,
+    MongodbModule,
     AuthModule,
     RoleModule,
     PermissionModule,
     DashboardModule,
+    ConnectionModule,
+    ReportModule,
     IconModule,
-    TypeOrmModule.forFeature([Permissao, Regra, Usuario, Dashboard]),
+    TypeOrmModule.forFeature([Permissao, Regra, Usuario, Dashboard, Conexao, Relatorio]),
   ],
   providers: [
     SyncRolesAndPermissions,
     DefaultUserService,
     SeedDashboardsService,
+    SeedRelatoriosService,
     SeedUsersService,
     ...(isThrottlingEnabled
       ? [

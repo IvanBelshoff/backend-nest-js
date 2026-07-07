@@ -12,6 +12,7 @@ import { Foto } from 'src/database/entities/Fotos';
 import { Regra } from 'src/database/entities/Regras';
 import { Permissao } from 'src/database/entities/Permissoes';
 import { Dashboard, Privacidade } from 'src/database/entities/Dashboards';
+import { Relatorio } from 'src/database/entities/Relatorios';
 import { existsSync, statSync, unlinkSync } from 'fs';
 import { isAbsolute, join } from 'path';
 import { env } from '../shared/env.schema';
@@ -39,6 +40,11 @@ export interface UsuariosByDashboard {
   usuariosDisponiveis: Omit<Usuario, 'dashboard'>[];
 }
 
+export interface UsuariosByRelatorio {
+  usuarios: Usuario[];
+  usuariosDisponiveis: Omit<Usuario, 'relatorio'>[];
+}
+
 @Injectable()
 export class UsersService {
   constructor(
@@ -52,6 +58,8 @@ export class UsersService {
     private permissaoRepository: Repository<Permissao>,
     @InjectRepository(Dashboard)
     private dashboardRepository: Repository<Dashboard>,
+    @InjectRepository(Relatorio)
+    private relatorioRepository: Repository<Relatorio>,
   ) {}
 
   async findAll(): Promise<Usuario[]> {
@@ -605,6 +613,180 @@ export class UsersService {
       usuarios: usuarios.filter((usuario) => !usuario.bloqueado),
       usuariosDisponiveis:
         dashboard.privacidade === Privacidade.PUBLIC ? [] : disponiveis,
+    };
+  }
+
+  async copyRelatorios(idUsuario: number, idCopiado: number): Promise<void> {
+    if (idUsuario === idCopiado) {
+      throw new BadRequestException(
+        'Relatórios não podem ser copiados para o mesmo usuário',
+      );
+    }
+
+    const target = await this.userRepository.findOne({
+      where: { id: idUsuario },
+    });
+
+    if (!target) {
+      throw new NotFoundException('Usuário não localizado');
+    }
+
+    const source = await this.userRepository.findOne({
+      where: { id: idCopiado },
+      relations: { relatorio: true },
+    });
+
+    if (!source) {
+      throw new NotFoundException('Usuário copiado não localizado');
+    }
+
+    target.relatorio = source.relatorio ?? [];
+    await this.userRepository.save(target);
+  }
+
+  async updateRelatorioFavorites(
+    id: number,
+    favoritos: number[],
+  ): Promise<void> {
+    const user = await this.userRepository.findOne({
+      where: { id },
+      relations: { relatorio: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Usuário não localizado');
+    }
+
+    const validatedIds: number[] = [];
+
+    for (const favoriteId of favoritos) {
+      const relatorio = await this.relatorioRepository.findOne({
+        where: { id: favoriteId },
+        relations: { usuario: true },
+      });
+
+      if (!relatorio) {
+        continue;
+      }
+
+      if (relatorio.privacidade === Privacidade.PRIVAT) {
+        const hasAccess =
+          relatorio.usuario?.some((usuario) => usuario.id === user.id) ||
+          relatorio.id_proprietario === Number(user.id);
+
+        if (!hasAccess) {
+          throw new ForbiddenException(
+            `Você não possui acesso ao ${relatorio.nome}`,
+          );
+        }
+      }
+
+      validatedIds.push(relatorio.id);
+    }
+
+    user.relatorios_favoritos = validatedIds;
+    await this.userRepository.save(user);
+  }
+
+  async assignRelatorios(id: number, relatorios: number[]): Promise<void> {
+    await this.userRepository.manager.transaction(async (manager) => {
+      const userRepository = manager.getRepository(Usuario);
+      const relatorioRepository = manager.getRepository(Relatorio);
+
+      const user = await userRepository.findOne({
+        where: { id },
+        relations: { relatorio: true },
+      });
+
+      if (!user) {
+        throw new NotFoundException('Usuário não localizado');
+      }
+
+      if (user.bloqueado) {
+        throw new BadRequestException(
+          'Operação não permitida pois o usuário está bloqueado',
+        );
+      }
+
+      const relatorioEntities = relatorios.length
+        ? await relatorioRepository.find({ where: { id: In(relatorios) } })
+        : [];
+
+      if (relatorioEntities.length !== relatorios.length) {
+        throw new BadRequestException('Algum relatório não foi encontrado.');
+      }
+
+      const publicNotOwned = relatorioEntities.find(
+        (relatorio) =>
+          relatorio.id_proprietario != null &&
+          relatorio.id_proprietario !== Number(user.id) &&
+          relatorio.privacidade === Privacidade.PUBLIC,
+      );
+
+      if (publicNotOwned) {
+        throw new BadRequestException(
+          `Relatório ${publicNotOwned.nome} está público`,
+        );
+      }
+
+      const owned = await relatorioRepository.find({
+        where: { id_proprietario: Number(user.id) },
+      });
+
+      const missingOwned = owned.filter(
+        (relatorio) => !relatorios.includes(Number(relatorio.id)),
+      );
+
+      if (missingOwned.length > 0) {
+        throw new BadRequestException(
+          `Alguns relatórios que o usuário ${user.nome} ${user.sobrenome} é proprietário não foram listados`,
+        );
+      }
+
+      user.relatorio = relatorioEntities;
+
+      if (user.relatorios_favoritos?.length) {
+        const assignedIds = relatorioEntities.map((relatorio) => relatorio.id);
+        user.relatorios_favoritos = user.relatorios_favoritos.filter(
+          (favoriteId) => assignedIds.includes(favoriteId),
+        );
+      }
+
+      await userRepository.save(user);
+    });
+  }
+
+  async getUsersByRelatorio(relatorioId: number): Promise<UsuariosByRelatorio> {
+    const relatorio = await this.relatorioRepository.findOne({
+      where: { id: relatorioId },
+    });
+
+    if (!relatorio) {
+      throw new NotFoundException('Relatório não localizado');
+    }
+
+    const usuarios = await this.userRepository.find({
+      relations: { foto: true },
+      where: { relatorio: { id: relatorioId } },
+      order: { nome: 'ASC' },
+    });
+
+    const todosUsuarios = await this.userRepository.find({
+      relations: { relatorio: true, foto: true },
+    });
+
+    const disponiveis = todosUsuarios
+      .filter(
+        (usuario) =>
+          !usuarios.some((associado) => associado.id === usuario.id) &&
+          !usuario.bloqueado,
+      )
+      .map(({ relatorio: _relatorio, ...rest }) => rest);
+
+    return {
+      usuarios: usuarios.filter((usuario) => !usuario.bloqueado),
+      usuariosDisponiveis:
+        relatorio.privacidade === Privacidade.PUBLIC ? [] : disponiveis,
     };
   }
 

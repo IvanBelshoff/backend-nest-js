@@ -38,6 +38,10 @@ import {
   type CopyDashboardsDto,
 } from './dto/copy-dashboards.dto';
 import {
+  copyRelatoriosSchema,
+  type CopyRelatoriosDto,
+} from './dto/copy-relatorios.dto';
+import {
   updateFavoritesSchema,
   type UpdateFavoritesDto,
 } from './dto/update-favorites.dto';
@@ -45,6 +49,10 @@ import {
   assignDashboardsSchema,
   type AssignDashboardsDto,
 } from './dto/assign-dashboards.dto';
+import {
+  assignRelatoriosSchema,
+  type AssignRelatoriosDto,
+} from './dto/assign-relatorios.dto';
 import { ZodValidation } from 'src/shared/decorators/zod-validation.decorator';
 import { Public } from 'src/shared/decorators/auth-public.decorator';
 import { SkipThrottle } from '@nestjs/throttler';
@@ -129,6 +137,12 @@ export class UsersController {
     return this.usersService.getUsersByDashboard(id);
   }
 
+  @Get('/relatorios/:id')
+  @Authorization('role', ['REGRA_RELATORIO'])
+  async getUsersByRelatorio(@Param('id', ParseIntPipe) id: number) {
+    return this.usersService.getUsersByRelatorio(id);
+  }
+
   @Get('/:id')
   @SelfOrRoles(['REGRA_USUARIO'])
   async findById(@Param('id', ParseIntPipe) id: number) {
@@ -175,6 +189,17 @@ export class UsersController {
     await this.usersService.copyDashboards(dto.id_usuario, dto.id_copiado);
   }
 
+  @Patch('/copy/relatorios')
+  @AuthorizationAll(
+    { type: 'role', required: ['REGRA_USUARIO'] },
+    { type: 'permission', required: ['PERMISSAO_CRIAR_USUARIO'] },
+  )
+  @ZodValidation(copyRelatoriosSchema)
+  @HttpCode(204)
+  async copyRelatorios(@Body() dto: CopyRelatoriosDto) {
+    await this.usersService.copyRelatorios(dto.id_usuario, dto.id_copiado);
+  }
+
   @Patch('/dashboards/favorites/:id')
   @SelfOrAdmin()
   @ZodValidation(updateFavoritesSchema)
@@ -184,6 +209,17 @@ export class UsersController {
     @Body() dto: UpdateFavoritesDto,
   ) {
     await this.usersService.updateFavorites(id, dto.favoritos);
+  }
+
+  @Patch('/relatorios/favorites/:id')
+  @SelfOrAdmin()
+  @ZodValidation(updateFavoritesSchema)
+  @HttpCode(204)
+  async updateRelatorioFavorites(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateFavoritesDto,
+  ) {
+    await this.usersService.updateRelatorioFavorites(id, dto.favoritos);
   }
 
   @Patch('/dashboards/:id')
@@ -198,6 +234,20 @@ export class UsersController {
     @Body() dto: AssignDashboardsDto,
   ) {
     await this.usersService.assignDashboards(id, dto.dashboards);
+  }
+
+  @Patch('/relatorios/:id')
+  @AuthorizationAll(
+    { type: 'role', required: ['REGRA_USUARIO'] },
+    { type: 'permission', required: ['PERMISSAO_CONCEDER_ACESSO_RELATORIO'] },
+  )
+  @ZodValidation(assignRelatoriosSchema)
+  @HttpCode(204)
+  async assignRelatorios(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: AssignRelatoriosDto,
+  ) {
+    await this.usersService.assignRelatorios(id, dto.relatorios);
   }
 
   @Patch('/authentication/:id')

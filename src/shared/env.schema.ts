@@ -43,6 +43,15 @@ export const envSchema = z.object({
     .string()
     .optional()
     .transform((value) => value === 'true'),
+  MONGO_URI: z.string().min(1),
+  MONGO_DB_NAME: z.string().min(1),
+  CONNECTION_ENCRYPTION_KEY: z.string().min(1),
+  REPORT_QUERY_TIMEOUT_MS: z.coerce.number().int().positive().default(30000),
+  REPORT_QUERY_MAX_ROWS: z.coerce.number().int().positive().default(10000),
+  SEED_RELATORIOS_ON_STARTUP: z
+    .string()
+    .optional()
+    .transform((value) => value === 'true'),
 });
 
 export type Env = z.infer<typeof envSchema>;

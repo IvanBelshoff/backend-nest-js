@@ -1,9 +1,11 @@
 import { env } from '../shared/env.schema';
+import { Conexao } from './entities/Conexoes';
 import { Dashboard } from './entities/Dashboards';
 import { Foto } from './entities/Fotos';
 import { Permissao } from './entities/Permissoes';
 import { RefreshToken } from './entities/RefreshTokens';
 import { Regra } from './entities/Regras';
+import { Relatorio } from './entities/Relatorios';
 import { Usuario } from './entities/Usuarios';
 
 export const entities = [
@@ -12,6 +14,8 @@ export const entities = [
   Regra,
   Permissao,
   Dashboard,
+  Conexao,
+  Relatorio,
   RefreshToken,
 ];
 
