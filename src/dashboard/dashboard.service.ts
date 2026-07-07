@@ -426,6 +426,55 @@ export class DashboardService {
     return this.dashboardRepository.save(dashboard);
   }
 
+  async getDashboardsByUser(userId: number): Promise<{
+    dashboards: Dashboard[];
+    dashboardsDisponiveis: Dashboard[];
+  }> {
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Usuario não localizado');
+    }
+
+    const dashboards = await this.dashboardRepository
+      .createQueryBuilder('dashboard')
+      .leftJoin('dashboard.usuario', 'usuario')
+      .where('usuario.id = :userId', { userId })
+      .andWhere('dashboard.privacidade = :privacidade', {
+        privacidade: Privacidade.PRIVAT,
+      })
+      .orderBy('dashboard.nome', 'ASC')
+      .getMany();
+
+    const dashboardsDisponiveis = await this.dashboardRepository
+      .createQueryBuilder('dashboard')
+      .where('dashboard.privacidade = :privacidade', {
+        privacidade: Privacidade.PRIVAT,
+      })
+      .andWhere(
+        '(dashboard.id_proprietario IS NULL OR dashboard.id_proprietario != :userId)',
+        { userId },
+      )
+      .andWhere(
+        `NOT EXISTS (
+          SELECT 1
+          FROM usuarios_dashboards usuariosDashboards
+          WHERE usuariosDashboards.dashboard_id = dashboard.id
+            AND usuariosDashboards.usuario_id = :userId
+        )`,
+        { userId },
+      )
+      .orderBy('dashboard.nome', 'ASC')
+      .getMany();
+
+    return {
+      dashboards,
+      dashboardsDisponiveis,
+    };
+  }
+
   async assignUsers(dashboardId: number, usuarios: number[]): Promise<void> {
     await this.dashboardRepository.manager.transaction(async (manager) => {
       const dashboardRepository = manager.getRepository(Dashboard);

@@ -16,6 +16,7 @@ export const AUTH_ENDPOINT_MATRIX = {
     'PATCH /user/copy/dashboards': { role: ['REGRA_ADMIN'] },
     'PATCH /user/dashboards/favorites/:id': { self: true },
     'PATCH /user/dashboards/:id': {
+      role: ['REGRA_USUARIO'],
       permission: ['PERMISSAO_CONCEDER_ACESSO_DASHBOARD'],
     },
     'PATCH /user/authentication/:id': { role: ['REGRA_ADMIN'] },
@@ -31,6 +32,10 @@ export const AUTH_ENDPOINT_MATRIX = {
     },
     'GET /dashboards': { role: ['REGRA_DASHBOARD'] },
     'GET /dashboards/filters': { role: ['REGRA_DASHBOARD'] },
+    'GET /dashboards/users/:id': {
+      role: ['REGRA_USUARIO'],
+      permission: ['PERMISSAO_CONCEDER_ACESSO_DASHBOARD'],
+    },
     'GET /dashboards/:id': { role: ['REGRA_DASHBOARD'] },
     'PATCH /dashboards/users/:id': {
       permission: ['PERMISSAO_CONCEDER_ACESSO_USUARIO'],

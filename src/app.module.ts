@@ -18,15 +18,22 @@ import { Permissao } from './database/entities/Permissoes';
 import { Regra } from './database/entities/Regras';
 import { Usuario } from './database/entities/Usuarios';
 import { Dashboard } from './database/entities/Dashboards';
+import { env } from './shared/env.schema';
+
+const isThrottlingEnabled = env.NODE_ENV !== 'development';
 
 @Module({
   controllers: [AppController],
   imports: [
-    ThrottlerModule.forRoot([
-      { name: 'auth', ttl: 900_000, limit: 20 },
-      { name: 'login', ttl: 900_000, limit: 5 },
-      { name: 'default', ttl: 60_000, limit: 100 },
-    ]),
+    ...(isThrottlingEnabled
+      ? [
+          ThrottlerModule.forRoot([
+            { name: 'auth', ttl: 900_000, limit: 20 },
+            { name: 'login', ttl: 900_000, limit: 5 },
+            { name: 'default', ttl: 60_000, limit: 100 },
+          ]),
+        ]
+      : []),
     UsersModule,
     DatabaseModule,
     AuthModule,
@@ -41,10 +48,14 @@ import { Dashboard } from './database/entities/Dashboards';
     DefaultUserService,
     SeedDashboardsService,
     SeedUsersService,
-    {
-      provide: APP_GUARD,
-      useClass: ThrottlerGuard,
-    },
+    ...(isThrottlingEnabled
+      ? [
+          {
+            provide: APP_GUARD,
+            useClass: ThrottlerGuard,
+          },
+        ]
+      : []),
   ],
 })
 export class AppModule {}

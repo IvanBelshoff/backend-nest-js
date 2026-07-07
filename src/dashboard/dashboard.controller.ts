@@ -202,6 +202,17 @@ export class DashboardController {
     return this.dashboardService.findById(id, req.user.sub);
   }
 
+  @Get('/users/:id')
+  @AuthorizationAll(
+    { type: 'role', required: ['REGRA_USUARIO'] },
+    { type: 'permission', required: ['PERMISSAO_CONCEDER_ACESSO_DASHBOARD'] },
+  )
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Lista dashboards disponíveis e concedidos por usuário' })
+  async getDashboardsByUser(@Param('id', ParseIntPipe) id: number) {
+    return this.dashboardService.getDashboardsByUser(id);
+  }
+
   @Patch('/users/:id')
   @Authorization('permission', ['PERMISSAO_CONCEDER_ACESSO_USUARIO'])
   @ZodValidation(assignUsersSchema)

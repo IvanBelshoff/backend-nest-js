@@ -50,7 +50,7 @@ import { Public } from 'src/shared/decorators/auth-public.decorator';
 import { SkipThrottle } from '@nestjs/throttler';
 import { UploadPhoto } from 'src/shared/decorators/upload-photo.decorator';
 import * as UserRequest from 'src/shared/interfaces/UserRequest';
-import { Authorization } from 'src/shared/decorators/authorization.decorator';
+import { Authorization, AuthorizationAll } from 'src/shared/decorators/authorization.decorator';
 import {
   SelfOrAdmin,
   SelfOrRoles,
@@ -175,7 +175,10 @@ export class UsersController {
   }
 
   @Patch('/dashboards/:id')
-  @Authorization('permission', ['PERMISSAO_CONCEDER_ACESSO_DASHBOARD'])
+  @AuthorizationAll(
+    { type: 'role', required: ['REGRA_USUARIO'] },
+    { type: 'permission', required: ['PERMISSAO_CONCEDER_ACESSO_DASHBOARD'] },
+  )
   @ZodValidation(assignDashboardsSchema)
   @HttpCode(204)
   async assignDashboards(
