@@ -45,6 +45,8 @@ import {
   type ReportQueryDto,
 } from './dto/report-query.dto';
 import { ReportExecutionService } from './execution/report-execution.service';
+import { exportReportSchema, type ExportReportDto } from './jobs/dto/export-report.dto';
+import { ReportExportService } from './export/report-export.service';
 import { ReportSnapshotService } from './report-snapshot.service';
 import { ReportListParams, ReportService } from './report.service';
 import { ApiBearerAuth, ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -56,6 +58,7 @@ export class ReportController {
     private readonly reportService: ReportService,
     private readonly reportExecutionService: ReportExecutionService,
     private readonly reportSnapshotService: ReportSnapshotService,
+    private readonly reportExportService: ReportExportService,
   ) {}
 
   @Post('/')
@@ -215,6 +218,29 @@ export class ReportController {
     };
   }
 
+  @Post('/:id/exportar')
+  @ZodValidation(exportReportSchema)
+  @HttpCode(HttpStatus.ACCEPTED)
+  async exportReport(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ExportReportDto,
+    @Request() req: UserRequest.UserRequest,
+  ) {
+    if (!req.user) throw new UnauthorizedException();
+
+    const jobId = await this.reportExportService.scheduleExport(
+      id,
+      req.user.sub,
+      dto.parametros ?? {},
+    );
+
+    return {
+      jobId,
+      status: 'queued',
+      message: 'Exportação enfileirada.',
+    };
+  }
+
   @Post('/:id/snapshot/atualizar')
   @Authorization('permission', ['PERMISSAO_ATUALIZAR_RELATORIO'])
   @ZodValidation(snapshotUpdateSchema)
@@ -281,11 +307,23 @@ export class ReportController {
 
     if (shouldGenerateSnapshot) {
       response.status(HttpStatus.ACCEPTED);
-      this.reportSnapshotService.scheduleSnapshotGeneration(
-        id,
-        req.user.sub,
-        dto.parametros_snapshot ?? {},
-      );
+
+      try {
+        const jobId = await this.reportSnapshotService.scheduleSnapshotGeneration(
+          id,
+          req.user.sub,
+          dto.parametros_snapshot ?? {},
+        );
+
+        return { ...relatorio, jobId };
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : 'Falha ao enfileirar geração de snapshot';
+        await this.reportService.rollbackSnapshotEnqueue(id, message);
+        throw error;
+      }
     }
 
     return relatorio;

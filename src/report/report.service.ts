@@ -2,6 +2,8 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  forwardRef,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -54,6 +56,7 @@ export class ReportService {
     private readonly userRepository: Repository<Usuario>,
     @InjectRepository(Conexao)
     private readonly conexaoRepository: Repository<Conexao>,
+    @Inject(forwardRef(() => ReportSnapshotService))
     private readonly reportSnapshotService: ReportSnapshotService,
   ) {}
 
@@ -341,11 +344,23 @@ export class ReportService {
     return { relatorio: saved, shouldGenerateSnapshot };
   }
 
+  async rollbackSnapshotEnqueue(id: number, message: string): Promise<void> {
+    const relatorio = await this.relatorioRepository.findOne({ where: { id } });
+
+    if (!relatorio) {
+      return;
+    }
+
+    relatorio.estado = EstadoRelatorio.ONLINE;
+    relatorio.erro_ultima_geracao = message;
+    await this.relatorioRepository.save(relatorio);
+  }
+
   async startSnapshotRefresh(
     id: number,
     requester: Requester,
     parametrosSnapshot: Record<string, unknown>,
-  ): Promise<Relatorio> {
+  ): Promise<{ relatorio: Relatorio; jobId: string }> {
     const relatorio = await this.relatorioRepository.findOne({ where: { id } });
 
     if (!relatorio) {
@@ -360,13 +375,23 @@ export class ReportService {
     relatorio.erro_ultima_geracao = null;
     await this.relatorioRepository.save(relatorio);
 
-    this.reportSnapshotService.scheduleSnapshotGeneration(
-      id,
-      requester.sub,
-      parametrosSnapshot,
-    );
+    try {
+      const jobId = await this.reportSnapshotService.scheduleSnapshotGeneration(
+        id,
+        requester.sub,
+        parametrosSnapshot,
+      );
 
-    return relatorio;
+      return { relatorio, jobId };
+    } catch (error) {
+      relatorio.estado = EstadoRelatorio.ONLINE;
+      relatorio.erro_ultima_geracao =
+        error instanceof Error
+          ? error.message
+          : 'Falha ao enfileirar geração de snapshot';
+      await this.relatorioRepository.save(relatorio);
+      throw error;
+    }
   }
 
   async getRelatoriosByUser(userId: number) {

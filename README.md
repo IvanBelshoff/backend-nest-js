@@ -35,6 +35,26 @@ Todas as variáveis obrigatórias estão documentadas em [`.env.example`](.env.e
 | `REGRAS_PERMISSOES` | JSON de roles → permissões |
 | `SYNC_ROLES_ON_STARTUP` | Sincronizar RBAC no bootstrap |
 | `SWAGGER_ENABLED` | Força `/docs` mesmo em production |
+| `PG_BOSS_*` | Filas pg-boss (schema, filas snapshot/export) |
+| `REPORT_EXPORT_DIR` | Diretório local dos CSVs exportados |
+
+## Filas (pg-boss)
+
+Snapshots e exportações CSV rodam em filas **pg-boss** no mesmo PostgreSQL da aplicação. API e workers iniciam no **mesmo processo** NestJS (`npm run start:dev`).
+
+- Schema `pgboss` criado automaticamente pelo pg-boss
+- Tabela `relatorio_jobs` — entidade `RelatorioJobs` em `src/database/entities/`
+- Desabilitar em testes: `PG_BOSS_ENABLED=false`
+
+### Endpoints de jobs
+
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| `GET` | `/relatorios/jobs/:jobId` | Status e progresso do job |
+| `GET` | `/relatorios/jobs/:jobId/download` | Download CSV (quando concluído) |
+| `POST` | `/relatorios/:id/exportar` | Enfileira export CSV (202 + `jobId`) |
+
+Respostas 202 de snapshot (`PATCH` offline, `POST /snapshot/atualizar`) incluem `jobId` adicional.
 
 ## Usuário padrão
 
@@ -94,7 +114,9 @@ src/
   dashboard/     # CRUD dashboards
   icon/          # Catálogo de ícones
   shared/        # Guards, filters, env, swagger
+  queue/         # pg-boss (filas)
   database/      # Entities, migrations, TypeORM
+  report/        # Relatórios, jobs, export CSV
 ```
 
 ## Licença

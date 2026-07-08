@@ -7,11 +7,9 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { Usuario } from './Usuarios';
+import { Privacidade } from './privacidade.enum';
 
-export enum Privacidade {
-  PRIVAT = 'privado',
-  PUBLIC = 'publico',
-}
+export { Privacidade };
 
 @Entity('dashboards')
 export class Dashboard {

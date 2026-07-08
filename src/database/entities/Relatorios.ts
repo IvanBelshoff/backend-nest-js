@@ -10,7 +10,7 @@ import {
 } from 'typeorm';
 import { Usuario } from './Usuarios';
 import { Conexao } from './Conexoes';
-import { Privacidade } from './Dashboards';
+import { Privacidade } from './privacidade.enum';
 
 export enum EstadoRelatorio {
   ONLINE = 'online',

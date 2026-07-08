@@ -11,6 +11,7 @@ import { PermissionModule } from './permission/permission.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { ConnectionModule } from './connection/connection.module';
 import { ReportModule } from './report/report.module';
+import { QueueModule } from './queue/queue.module';
 import { IconModule } from './icon/icon.module';
 import { SyncRolesAndPermissions } from './shared/services/SyncRolesAndPermissions';
 import { DefaultUserService } from './shared/services/SeedDefaultUser';
@@ -48,6 +49,7 @@ const isThrottlingEnabled = env.NODE_ENV !== 'development';
     PermissionModule,
     DashboardModule,
     ConnectionModule,
+    QueueModule,
     ReportModule,
     IconModule,
     TypeOrmModule.forFeature([Permissao, Regra, Usuario, Dashboard, Conexao, Relatorio]),

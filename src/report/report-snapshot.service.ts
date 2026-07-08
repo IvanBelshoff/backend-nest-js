@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { forwardRef, Inject, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Model } from 'mongoose';
@@ -7,6 +7,12 @@ import {
   EstadoRelatorio,
   Relatorio,
 } from 'src/database/entities/Relatorios';
+import { PgBossService } from 'src/queue/pg-boss.service';
+import { REPORT_SNAPSHOT_QUEUE } from 'src/queue/queue.constants';
+import type { SnapshotJobPayload } from 'src/queue/types/snapshot-job.payload';
+import { env } from 'src/shared/env.schema';
+import { RelatorioJobTipo } from 'src/database/entities/RelatorioJobs';
+import { ReportJobService } from './jobs/report-job.service';
 import { RelatorioSnapshot } from './schemas/relatorio-snapshot.schema';
 import { ReportExecutionService } from './execution/report-execution.service';
 
@@ -18,6 +24,9 @@ export class ReportSnapshotService {
     @InjectRepository(Relatorio)
     private readonly relatorioRepository: Repository<Relatorio>,
     private readonly reportExecutionService: ReportExecutionService,
+    private readonly pgBossService: PgBossService,
+    @Inject(forwardRef(() => ReportJobService))
+    private readonly reportJobService: ReportJobService,
   ) {}
 
   async generateSnapshot(
@@ -66,14 +75,39 @@ export class ReportSnapshotService {
     }
   }
 
-  scheduleSnapshotGeneration(
+  async scheduleSnapshotGeneration(
     relatorioId: number,
     userId: number,
     parametrosSnapshot: Record<string, unknown> = {},
-  ): void {
-    setImmediate(() => {
-      void this.generateSnapshot(relatorioId, userId, parametrosSnapshot);
+  ): Promise<string> {
+    const payload: SnapshotJobPayload = {
+      relatorioId,
+      userId,
+      parametrosSnapshot,
+    };
+
+    const expireInSeconds = Math.ceil(env.REPORT_QUERY_TIMEOUT_MS / 1000) + 300;
+
+    const jobId = await this.pgBossService.send(
+      REPORT_SNAPSHOT_QUEUE,
+      payload,
+      {
+        singletonKey: `report-snapshot-${relatorioId}`,
+        retryLimit: env.REPORT_SNAPSHOT_RETRY_LIMIT,
+        retryDelay: env.REPORT_SNAPSHOT_RETRY_DELAY_SECONDS,
+        expireInSeconds,
+      },
+    );
+
+    await this.reportJobService.createJob({
+      id: jobId,
+      relatorioId,
+      userId,
+      tipo: RelatorioJobTipo.SNAPSHOT,
+      parametros: parametrosSnapshot,
     });
+
+    return jobId;
   }
 
   async findSnapshot(relatorioId: number) {

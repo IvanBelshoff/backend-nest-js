@@ -48,6 +48,27 @@ export const envSchema = z.object({
   CONNECTION_ENCRYPTION_KEY: z.string().min(1),
   REPORT_QUERY_TIMEOUT_MS: z.coerce.number().int().positive().default(30000),
   REPORT_QUERY_MAX_ROWS: z.coerce.number().int().positive().default(10000),
+  PG_BOSS_ENABLED: z
+    .string()
+    .optional()
+    .transform((value) => value !== 'false'),
+  PG_BOSS_SCHEMA: z.string().min(1).default('pgboss'),
+  REPORT_SNAPSHOT_QUEUE_NAME: z
+    .string()
+    .min(1)
+    .default('report.snapshot.generate'),
+  REPORT_SNAPSHOT_QUEUE_CONCURRENCY: z.coerce.number().int().positive().default(2),
+  REPORT_SNAPSHOT_RETRY_LIMIT: z.coerce.number().int().nonnegative().default(3),
+  REPORT_SNAPSHOT_RETRY_DELAY_SECONDS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(60),
+  REPORT_EXPORT_QUEUE_NAME: z.string().min(1).default('report.export.csv'),
+  REPORT_EXPORT_QUEUE_CONCURRENCY: z.coerce.number().int().positive().default(3),
+  REPORT_EXPORT_RETRY_LIMIT: z.coerce.number().int().nonnegative().default(2),
+  REPORT_EXPORT_DIR: z.string().min(1).default('./data/exports'),
+  REPORT_EXPORT_TTL_HOURS: z.coerce.number().int().positive().default(24),
   SEED_RELATORIOS_ON_STARTUP: z
     .string()
     .optional()

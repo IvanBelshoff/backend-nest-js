@@ -1,7 +1,7 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-export class Default1783442339597 implements MigrationInterface {
-    name = 'Default1783442339597'
+export class Default1783543222943 implements MigrationInterface {
+    name = 'Default1783543222943'
 
     public async up(queryRunner: QueryRunner): Promise<void> {
         await queryRunner.query(`CREATE TABLE "fotos" ("id" SERIAL NOT NULL, "nome" text NOT NULL, "originalname" text NOT NULL, "tipo" text NOT NULL, "tamanho" integer NOT NULL, "local" text NOT NULL, "url" text NOT NULL, "data_criacao" date NOT NULL DEFAULT now(), "data_atualizacao" date NOT NULL DEFAULT ('now'::text)::timestamp(6) with time zone, CONSTRAINT "PK_929dc0abc9924e9f2797dbca023" PRIMARY KEY ("id"))`);
@@ -16,6 +16,11 @@ export class Default1783442339597 implements MigrationInterface {
         await queryRunner.query(`CREATE TYPE "public"."conexoes_tipo_enum" AS ENUM('postgres', 'mysql', 'mssql', 'oracle')`);
         await queryRunner.query(`CREATE TABLE "conexoes" ("id" BIGSERIAL NOT NULL, "nome" text NOT NULL, "tipo" "public"."conexoes_tipo_enum" NOT NULL, "host" text NOT NULL, "porta" integer NOT NULL, "database" text NOT NULL, "usuario" text NOT NULL, "senha_criptografada" text NOT NULL, "opcoes" jsonb, "usuario_cadastrador" text, "usuario_atualizador" text, "data_criacao" TIMESTAMP NOT NULL DEFAULT now(), "data_atualizacao" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "UQ_6bee9f175b4e0bccc8b50cac463" UNIQUE ("nome"), CONSTRAINT "PK_5a18c09cdb774384468f1a4e3ed" PRIMARY KEY ("id"))`);
         await queryRunner.query(`CREATE TABLE "refresh_tokens" ("id" BIGSERIAL NOT NULL, "usuario_id" bigint NOT NULL, "token_hash" text NOT NULL, "expira_em" TIMESTAMP NOT NULL, "revogado_em" TIMESTAMP, "novo_token" text, "data_criacao" TIMESTAMP NOT NULL DEFAULT now(), "data_atualizacao" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "UQ_a7838d2ba25be1342091b6695f1" UNIQUE ("token_hash"), CONSTRAINT "PK_7d8bee0204106019488c4c50ffa" PRIMARY KEY ("id"))`);
+        await queryRunner.query(`CREATE TYPE "public"."relatorio_jobs_tipo_enum" AS ENUM('snapshot', 'export_csv')`);
+        await queryRunner.query(`CREATE TYPE "public"."relatorio_jobs_status_enum" AS ENUM('queued', 'processing', 'completed', 'failed')`);
+        await queryRunner.query(`CREATE TABLE "relatorio_jobs" ("id" uuid NOT NULL, "relatorio_id" bigint NOT NULL, "user_id" integer NOT NULL, "tipo" "public"."relatorio_jobs_tipo_enum" NOT NULL, "status" "public"."relatorio_jobs_status_enum" NOT NULL DEFAULT 'queued', "progress" integer NOT NULL DEFAULT '0', "result_path" text, "error_message" text, "parametros" jsonb NOT NULL DEFAULT '{}', "created_at" TIMESTAMP NOT NULL DEFAULT now(), "completed_at" TIMESTAMP, CONSTRAINT "PK_621366c8fe9f9b4e476497fc751" PRIMARY KEY ("id"))`);
+        await queryRunner.query(`CREATE INDEX "IDX_relatorio_jobs_user_id" ON "relatorio_jobs"  ("user_id") `);
+        await queryRunner.query(`CREATE INDEX "IDX_relatorio_jobs_relatorio_id" ON "relatorio_jobs"  ("relatorio_id") `);
         await queryRunner.query(`CREATE TABLE "usuarios_permissoes" ("usuario_id" bigint NOT NULL, "permissao_id" bigint NOT NULL, CONSTRAINT "PK_c2275cafd5b7251e1901e02768d" PRIMARY KEY ("usuario_id", "permissao_id"))`);
         await queryRunner.query(`CREATE INDEX "IDX_a590446adec482807e08a9f17f" ON "usuarios_permissoes"  ("usuario_id") `);
         await queryRunner.query(`CREATE INDEX "IDX_bc6db171d9b3fa0891abc5c204" ON "usuarios_permissoes"  ("permissao_id") `);
@@ -32,6 +37,7 @@ export class Default1783442339597 implements MigrationInterface {
         await queryRunner.query(`ALTER TABLE "usuarios" ADD CONSTRAINT "FK_55052d24aed9dc9717268122d3e" FOREIGN KEY ("foto_id") REFERENCES "fotos"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
         await queryRunner.query(`ALTER TABLE "relatorios" ADD CONSTRAINT "FK_dc6efb1fd80b493398d66be521c" FOREIGN KEY ("id_conexao") REFERENCES "conexoes"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`);
         await queryRunner.query(`ALTER TABLE "refresh_tokens" ADD CONSTRAINT "FK_c8349fdadc1bc791125bdd8c855" FOREIGN KEY ("usuario_id") REFERENCES "usuarios"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "relatorio_jobs" ADD CONSTRAINT "FK_3310cb7c81c439c02d62497487b" FOREIGN KEY ("relatorio_id") REFERENCES "relatorios"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
         await queryRunner.query(`ALTER TABLE "usuarios_permissoes" ADD CONSTRAINT "FK_a590446adec482807e08a9f17fc" FOREIGN KEY ("usuario_id") REFERENCES "usuarios"("id") ON DELETE CASCADE ON UPDATE SET NULL`);
         await queryRunner.query(`ALTER TABLE "usuarios_permissoes" ADD CONSTRAINT "FK_bc6db171d9b3fa0891abc5c204c" FOREIGN KEY ("permissao_id") REFERENCES "permissoes"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`);
         await queryRunner.query(`ALTER TABLE "usuarios_regras" ADD CONSTRAINT "FK_0066c27e153d919f92134d975a5" FOREIGN KEY ("usuario_id") REFERENCES "usuarios"("id") ON DELETE CASCADE ON UPDATE SET NULL`);
@@ -51,6 +57,7 @@ export class Default1783442339597 implements MigrationInterface {
         await queryRunner.query(`ALTER TABLE "usuarios_regras" DROP CONSTRAINT "FK_0066c27e153d919f92134d975a5"`);
         await queryRunner.query(`ALTER TABLE "usuarios_permissoes" DROP CONSTRAINT "FK_bc6db171d9b3fa0891abc5c204c"`);
         await queryRunner.query(`ALTER TABLE "usuarios_permissoes" DROP CONSTRAINT "FK_a590446adec482807e08a9f17fc"`);
+        await queryRunner.query(`ALTER TABLE "relatorio_jobs" DROP CONSTRAINT "FK_3310cb7c81c439c02d62497487b"`);
         await queryRunner.query(`ALTER TABLE "refresh_tokens" DROP CONSTRAINT "FK_c8349fdadc1bc791125bdd8c855"`);
         await queryRunner.query(`ALTER TABLE "relatorios" DROP CONSTRAINT "FK_dc6efb1fd80b493398d66be521c"`);
         await queryRunner.query(`ALTER TABLE "usuarios" DROP CONSTRAINT "FK_55052d24aed9dc9717268122d3e"`);
@@ -67,6 +74,11 @@ export class Default1783442339597 implements MigrationInterface {
         await queryRunner.query(`DROP INDEX "public"."IDX_bc6db171d9b3fa0891abc5c204"`);
         await queryRunner.query(`DROP INDEX "public"."IDX_a590446adec482807e08a9f17f"`);
         await queryRunner.query(`DROP TABLE "usuarios_permissoes"`);
+        await queryRunner.query(`DROP INDEX "public"."IDX_relatorio_jobs_relatorio_id"`);
+        await queryRunner.query(`DROP INDEX "public"."IDX_relatorio_jobs_user_id"`);
+        await queryRunner.query(`DROP TABLE "relatorio_jobs"`);
+        await queryRunner.query(`DROP TYPE "public"."relatorio_jobs_status_enum"`);
+        await queryRunner.query(`DROP TYPE "public"."relatorio_jobs_tipo_enum"`);
         await queryRunner.query(`DROP TABLE "refresh_tokens"`);
         await queryRunner.query(`DROP TABLE "conexoes"`);
         await queryRunner.query(`DROP TYPE "public"."conexoes_tipo_enum"`);

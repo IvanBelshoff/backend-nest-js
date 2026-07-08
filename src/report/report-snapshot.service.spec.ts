@@ -6,9 +6,12 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { EstadoRelatorio, Relatorio } from 'src/database/entities/Relatorios';
+import { PgBossService } from 'src/queue/pg-boss.service';
 import { RelatorioSnapshot } from './schemas/relatorio-snapshot.schema';
 import { ReportExecutionService } from './execution/report-execution.service';
 import { ReportSnapshotService } from './report-snapshot.service';
+import { ReportJobService } from './jobs/report-job.service';
+import { RelatorioJobTipo } from 'src/database/entities/RelatorioJobs';
 
 describe('ReportSnapshotService', () => {
   let service: ReportSnapshotService;
@@ -21,6 +24,12 @@ describe('ReportSnapshotService', () => {
   };
   const reportExecutionService = {
     execute: jest.fn(),
+  };
+  const pgBossService = {
+    send: jest.fn(),
+  };
+  const reportJobService = {
+    createJob: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -40,6 +49,14 @@ describe('ReportSnapshotService', () => {
         {
           provide: ReportExecutionService,
           useValue: reportExecutionService,
+        },
+        {
+          provide: PgBossService,
+          useValue: pgBossService,
+        },
+        {
+          provide: ReportJobService,
+          useValue: reportJobService,
         },
       ],
     }).compile();
@@ -84,5 +101,23 @@ describe('ReportSnapshotService', () => {
     expect(relatorio.estado).toBe(EstadoRelatorio.OFFLINE);
     expect(relatorio.snapshot_valido).toBe(true);
     expect(snapshotModel.findOneAndUpdate).toHaveBeenCalled();
+  });
+
+  it('enqueues snapshot job and registers metadata', async () => {
+    pgBossService.send.mockResolvedValue('job-uuid');
+    reportJobService.createJob.mockResolvedValue({});
+
+    const jobId = await service.scheduleSnapshotGeneration(1, 10, { mes: 1 });
+
+    expect(jobId).toBe('job-uuid');
+    expect(pgBossService.send).toHaveBeenCalled();
+    expect(reportJobService.createJob).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'job-uuid',
+        relatorioId: 1,
+        userId: 10,
+        tipo: RelatorioJobTipo.SNAPSHOT,
+      }),
+    );
   });
 });

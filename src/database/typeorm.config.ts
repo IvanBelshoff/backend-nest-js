@@ -6,6 +6,7 @@ import { Permissao } from './entities/Permissoes';
 import { RefreshToken } from './entities/RefreshTokens';
 import { Regra } from './entities/Regras';
 import { Relatorio } from './entities/Relatorios';
+import { RelatorioJob } from './entities/RelatorioJobs';
 import { Usuario } from './entities/Usuarios';
 
 export const entities = [
@@ -16,6 +17,7 @@ export const entities = [
   Dashboard,
   Conexao,
   Relatorio,
+  RelatorioJob,
   RefreshToken,
 ];
 
