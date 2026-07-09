@@ -100,7 +100,37 @@ describe('ReportSnapshotService', () => {
 
     expect(relatorio.estado).toBe(EstadoRelatorio.OFFLINE);
     expect(relatorio.snapshot_valido).toBe(true);
-    expect(snapshotModel.findOneAndUpdate).toHaveBeenCalled();
+    expect(snapshotModel.findOneAndUpdate).toHaveBeenCalledWith(
+      { relatorio_id: 1 },
+      expect.objectContaining({
+        relatorio_id: 1,
+        total_linhas: 1,
+      }),
+      { upsert: true, returnDocument: 'after' },
+    );
+  });
+
+  it('rejects snapshot when payload exceeds MongoDB safe size', async () => {
+    const relatorio = {
+      id: 1,
+      estado: EstadoRelatorio.GERANDO_SNAPSHOT,
+    } as Relatorio;
+
+    relatorioRepository.findOne.mockResolvedValue(relatorio);
+    reportExecutionService.execute.mockResolvedValue({
+      colunas: ['payload'],
+      dados: Array.from({ length: 1000 }, () => ({
+        payload: 'x'.repeat(20_000),
+      })),
+      total_linhas: 1000,
+    });
+    relatorioRepository.save.mockImplementation(async (entity) => entity);
+
+    await service.generateSnapshot(1, 10, {});
+
+    expect(relatorio.estado).toBe(EstadoRelatorio.ONLINE);
+    expect(relatorio.erro_ultima_geracao).toContain('limite do MongoDB');
+    expect(snapshotModel.findOneAndUpdate).not.toHaveBeenCalled();
   });
 
   it('enqueues snapshot job and registers metadata', async () => {

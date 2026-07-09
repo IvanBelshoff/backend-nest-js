@@ -15,6 +15,11 @@ import { RelatorioJobTipo } from 'src/database/entities/RelatorioJobs';
 import { ReportJobService } from './jobs/report-job.service';
 import { RelatorioSnapshot } from './schemas/relatorio-snapshot.schema';
 import { ReportExecutionService } from './execution/report-execution.service';
+import {
+  buildSnapshotSizeExceededMessage,
+  estimateSnapshotPayloadBytes,
+  SAFE_SNAPSHOT_MAX_BYTES,
+} from './snapshot-size.util';
 
 @Injectable()
 export class ReportSnapshotService {
@@ -48,18 +53,54 @@ export class ReportSnapshotService {
         parametrosSnapshot,
       );
 
+      const snapshotDocument = {
+        relatorio_id: relatorioId,
+        gerado_em: new Date(),
+        gerado_por: userId,
+        parametros_utilizados: parametrosSnapshot,
+        colunas: result.colunas,
+        dados: result.dados,
+        total_linhas: result.total_linhas,
+      };
+
+      const estimatedBytes = estimateSnapshotPayloadBytes(snapshotDocument);
+
+      // #region agent log
+      try {
+        const { appendFileSync } = await import('node:fs');
+        appendFileSync(
+          'debug-59fd65.log',
+          `${JSON.stringify({
+            sessionId: '59fd65',
+            hypothesisId: 'A',
+            location: 'report-snapshot.service.ts:pre-save',
+            message: 'snapshot payload size before MongoDB write',
+            data: {
+              relatorioId,
+              totalLinhas: result.total_linhas,
+              colunas: result.colunas.length,
+              estimatedBytes,
+              safeMaxBytes: SAFE_SNAPSHOT_MAX_BYTES,
+              exceedsLimit: estimatedBytes > SAFE_SNAPSHOT_MAX_BYTES,
+            },
+            timestamp: Date.now(),
+          })}\n`,
+        );
+      } catch {
+        /* ignore debug log failures */
+      }
+      // #endregion
+
+      if (estimatedBytes > SAFE_SNAPSHOT_MAX_BYTES) {
+        throw new Error(
+          buildSnapshotSizeExceededMessage(estimatedBytes),
+        );
+      }
+
       await this.snapshotModel.findOneAndUpdate(
         { relatorio_id: relatorioId },
-        {
-          relatorio_id: relatorioId,
-          gerado_em: new Date(),
-          gerado_por: userId,
-          parametros_utilizados: parametrosSnapshot,
-          colunas: result.colunas,
-          dados: result.dados,
-          total_linhas: result.total_linhas,
-        },
-        { upsert: true, new: true },
+        snapshotDocument,
+        { upsert: true, returnDocument: 'after' },
       );
 
       relatorio.estado = EstadoRelatorio.OFFLINE;
