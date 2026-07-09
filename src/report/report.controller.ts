@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   ConflictException,
   Controller,
@@ -44,9 +45,18 @@ import {
   type ReportPublicQueryDto,
   type ReportQueryDto,
 } from './dto/report-query.dto';
+import {
+  reportDataQuerySchema,
+  type ReportDataQueryDto,
+} from './dto/report-data-query.dto';
+import {
+  parseFiltersParam,
+  parseSortParam,
+} from './duckdb/duckdb-query.util';
 import { ReportExecutionService } from './execution/report-execution.service';
 import { exportReportSchema, type ExportReportDto } from './jobs/dto/export-report.dto';
 import { ReportExportService } from './export/report-export.service';
+import { SnapshotQueryService } from './snapshot-query.service';
 import { ReportSnapshotService } from './report-snapshot.service';
 import { ReportListParams, ReportService } from './report.service';
 import { ApiBearerAuth, ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -57,6 +67,7 @@ export class ReportController {
   constructor(
     private readonly reportService: ReportService,
     private readonly reportExecutionService: ReportExecutionService,
+    private readonly snapshotQueryService: SnapshotQueryService,
     private readonly reportSnapshotService: ReportSnapshotService,
     private readonly reportExportService: ReportExportService,
   ) {}
@@ -175,20 +186,36 @@ export class ReportController {
   }
 
   @Get('/:id/dados')
+  @ZodQueryValidation(reportDataQuerySchema)
   async getData(
     @Param('id', ParseIntPipe) id: number,
-    @Query('parametros') parametrosRaw: string | undefined,
+    @Query() query: ReportDataQueryDto,
     @Request() req: UserRequest.UserRequest,
   ) {
     if (!req.user) throw new UnauthorizedException();
     const relatorio = await this.reportService.findById(id, req.user.sub);
 
+    let sort;
+    let filters;
+    try {
+      sort = parseSortParam(query.sort);
+      filters = parseFiltersParam(query.filtros);
+    } catch (error) {
+      throw new BadRequestException(
+        error instanceof Error ? error.message : 'Parâmetros de consulta inválidos',
+      );
+    }
+
     if (relatorio.estado === EstadoRelatorio.ONLINE) {
-      const parametros = parametrosRaw ? JSON.parse(parametrosRaw) : {};
+      const parametros = query.parametros ? JSON.parse(query.parametros) : {};
       const result = await this.reportExecutionService.execute(id, parametros);
       return {
         estado: relatorio.estado,
-        ...result,
+        colunas: result.colunas,
+        dados: result.dados,
+        total_linhas: result.total_linhas,
+        page: 1,
+        page_size: result.total_linhas,
       };
     }
 
@@ -201,9 +228,14 @@ export class ReportController {
       );
     }
 
-    const snapshot = await this.reportSnapshotService.findSnapshot(id);
+    const page = await this.snapshotQueryService.queryPage(id, {
+      page: query.page,
+      pageSize: query.page_size,
+      sort,
+      filters,
+    });
 
-    if (!snapshot) {
+    if (!page) {
       throw new ConflictException('Snapshot não encontrado para este relatório.');
     }
 
@@ -211,10 +243,13 @@ export class ReportController {
       estado: relatorio.estado,
       snapshot_atualizado_em: relatorio.snapshot_atualizado_em,
       snapshot_valido: relatorio.snapshot_valido,
-      parametros_utilizados: snapshot.parametros_utilizados,
-      colunas: snapshot.colunas,
-      dados: snapshot.dados,
-      total_linhas: snapshot.total_linhas,
+      parametros_utilizados: page.parametros_utilizados,
+      colunas: page.colunas,
+      colunas_tipos: page.colunas_tipos,
+      dados: page.dados,
+      total_linhas: page.total_linhas,
+      page: query.page,
+      page_size: query.page_size,
     };
   }
 

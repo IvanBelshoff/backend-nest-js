@@ -20,11 +20,26 @@ export class RelatorioSnapshot {
   @Prop({ type: [String], default: [] })
   colunas: string[];
 
-  @Prop({ type: [Object], default: [] })
-  dados: Record<string, unknown>[];
+  @Prop({ type: Object, default: {} })
+  colunas_tipos: Record<string, string>;
 
   @Prop({ type: Number, required: true, default: 0 })
   total_linhas: number;
+
+  @Prop({ type: String, default: 'local' })
+  storage_driver: string;
+
+  @Prop({ type: String })
+  storage_key?: string;
+
+  @Prop({ type: String, default: 'parquet' })
+  formato: string;
+
+  @Prop({ type: String })
+  checksum_sha256?: string;
+
+  @Prop({ type: Number, default: 0 })
+  tamanho_bytes: number;
 }
 
 export const RelatorioSnapshotSchema =

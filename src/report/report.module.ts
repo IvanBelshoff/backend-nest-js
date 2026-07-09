@@ -15,6 +15,11 @@ import { ReportJobService } from './jobs/report-job.service';
 import { ReportExportService } from './export/report-export.service';
 import { ReportSnapshotWorker } from './workers/report-snapshot.worker';
 import { ReportExportWorker } from './workers/report-export.worker';
+import { DuckDbService } from './duckdb/duckdb.service';
+import { SnapshotQueryService } from './snapshot-query.service';
+import { STORAGE_PROVIDER } from './storage/storage-provider.interface';
+import { createStorageProvider } from './storage/storage-provider.factory';
+import { SnapshotCleanupService } from './storage/snapshot-cleanup.service';
 
 @Module({
   imports: [
@@ -31,6 +36,13 @@ import { ReportExportWorker } from './workers/report-export.worker';
     ReportExportService,
     ReportSnapshotWorker,
     ReportExportWorker,
+    DuckDbService,
+    SnapshotQueryService,
+    SnapshotCleanupService,
+    {
+      provide: STORAGE_PROVIDER,
+      useFactory: createStorageProvider,
+    },
   ],
   exports: [ReportService],
 })

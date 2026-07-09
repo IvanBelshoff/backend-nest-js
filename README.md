@@ -37,6 +37,31 @@ Todas as variáveis obrigatórias estão documentadas em [`.env.example`](.env.e
 | `SWAGGER_ENABLED` | Força `/docs` mesmo em production |
 | `PG_BOSS_*` | Filas pg-boss (schema, filas snapshot/export) |
 | `REPORT_EXPORT_DIR` | Diretório local dos CSVs exportados |
+| `STORAGE_DRIVER` | Driver de snapshots Parquet (`local`) |
+| `SNAPSHOT_STORAGE_DIR` | Diretório dos arquivos Parquet |
+| `DUCKDB_MAX_CONCURRENCY` | Limite de consultas DuckDB simultâneas |
+
+## Snapshots analíticos (Parquet + DuckDB)
+
+Relatórios offline materializam o resultado da query em arquivos **Parquet** no disco local (`SNAPSHOT_STORAGE_DIR`). O MongoDB guarda apenas metadados (colunas, tipos, total, `storage_key`, checksum SHA-256).
+
+| Variável | Descrição |
+|----------|-----------|
+| `STORAGE_DRIVER` | Driver de armazenamento (`local`; futuro: `s3`) |
+| `SNAPSHOT_STORAGE_DIR` | Diretório dos arquivos Parquet (default `./data/snapshots`) |
+| `SNAPSHOT_PARQUET_COMPRESSION` | Compressão Parquet (`zstd`, `snappy`, `gzip`) |
+| `SNAPSHOT_TTL_HOURS` | TTL para limpeza de Parquet órfãos |
+| `DUCKDB_MAX_CONCURRENCY` | Consultas DuckDB simultâneas |
+| `DUCKDB_QUERY_TIMEOUT_MS` | Timeout por consulta DuckDB |
+
+### Leitura paginada
+
+`GET /relatorios/:id/dados` retorna dados paginados para relatórios offline:
+
+- Query params: `page` (default 1), `page_size` (default 50, max 1000), `sort` (`coluna:asc,coluna2:desc`), `filtros` (JSON array)
+- Resposta inclui `page`, `page_size`, `total_linhas`, `colunas_tipos`
+
+Snapshots legados (sem `storage_key`) são marcados inválidos no bootstrap e precisam ser regenerados.
 
 ## Filas (pg-boss)
 

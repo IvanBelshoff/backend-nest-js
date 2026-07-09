@@ -67,8 +67,16 @@ export const envSchema = z.object({
   REPORT_EXPORT_QUEUE_NAME: z.string().min(1).default('report.export.csv'),
   REPORT_EXPORT_QUEUE_CONCURRENCY: z.coerce.number().int().positive().default(3),
   REPORT_EXPORT_RETRY_LIMIT: z.coerce.number().int().nonnegative().default(2),
-  REPORT_EXPORT_DIR: z.string().min(1).default('./data/exports'),
+  REPORT_EXPORT_DIR: z.string().min(1).default('src/shared/data/exports'),
   REPORT_EXPORT_TTL_HOURS: z.coerce.number().int().positive().default(24),
+  STORAGE_DRIVER: z.enum(['local']).default('local'),
+  SNAPSHOT_STORAGE_DIR: z.string().min(1).default('src/shared/data/snapshots'),
+  SNAPSHOT_PARQUET_COMPRESSION: z
+    .enum(['zstd', 'snappy', 'gzip', 'uncompressed'])
+    .default('zstd'),
+  SNAPSHOT_TTL_HOURS: z.coerce.number().int().positive().default(168),
+  DUCKDB_MAX_CONCURRENCY: z.coerce.number().int().positive().default(2),
+  DUCKDB_QUERY_TIMEOUT_MS: z.coerce.number().int().positive().default(30000),
   SEED_RELATORIOS_ON_STARTUP: z
     .string()
     .optional()
