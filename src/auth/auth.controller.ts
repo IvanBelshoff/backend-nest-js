@@ -137,6 +137,16 @@ export class AuthController {
         exp: 1710001200,
         regras: ['REGRA_ADMIN'],
         permissoes: [],
+        preferencias_ui: {
+          version: 1,
+          theme: 'system',
+          accentColor: '#0078D4',
+          notification: {
+            style: 'circularProgress',
+            placement: 'bottom-right',
+          },
+          language: 'pt-BR',
+        },
       },
     },
   })

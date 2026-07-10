@@ -64,4 +64,27 @@ describe('UsersController', () => {
     });
     expect(result).toBeInstanceOf(StreamableFile);
   });
+
+  it('delegates preference updates to the service', async () => {
+    const usersService = {
+      updatePreferences: jest.fn().mockResolvedValue({
+        version: 1,
+        theme: 'dark',
+        accentColor: '#0078D4',
+        notification: {
+          style: 'circularProgress',
+          placement: 'bottom-right',
+        },
+        language: 'pt-BR',
+      }),
+    };
+    const controller = new UsersController(usersService as any);
+
+    const result = await controller.updatePreferences(1, { theme: 'dark' });
+
+    expect(usersService.updatePreferences).toHaveBeenCalledWith(1, {
+      theme: 'dark',
+    });
+    expect(result.theme).toBe('dark');
+  });
 });

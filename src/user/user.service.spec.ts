@@ -3,6 +3,12 @@ import { UsersService } from './user.service';
 import { Usuario } from 'src/database/entities/Usuarios';
 
 describe('UsersService', () => {
+  function createRefreshTokenServiceMock() {
+    return {
+      revokeAllForUser: jest.fn().mockResolvedValue(undefined),
+    };
+  }
+
   function buildServiceMocks() {
     const savedUser = {
       id: 1,
@@ -13,6 +19,11 @@ describe('UsersService', () => {
     } as Usuario;
     const transactionUserRepository = {
       create: jest.fn().mockImplementation((user) => user),
+      findOne: jest.fn().mockResolvedValue({
+        id: 1,
+        nome: 'Admin',
+        sobrenome: 'User',
+      }),
       save: jest.fn().mockImplementation((user) => {
         if (!user.id) {
           Object.assign(savedUser, user);
@@ -51,12 +62,16 @@ describe('UsersService', () => {
     const regraRepository = {};
     const permissaoRepository = {};
     const dashboardRepository = {};
+    const relatorioRepository = {};
+    const refreshTokenService = createRefreshTokenServiceMock();
     const service = new UsersService(
       userRepository as any,
       fotoRepository as any,
       regraRepository as any,
       permissaoRepository as any,
       dashboardRepository as any,
+      relatorioRepository as any,
+      refreshTokenService as any,
     );
 
     return {
@@ -64,6 +79,8 @@ describe('UsersService', () => {
       fotoRepository,
       transactionFotoRepository,
       transactionUserRepository,
+      userRepository,
+      refreshTokenService,
     };
   }
 
@@ -198,6 +215,8 @@ describe('UsersService', () => {
         {} as any,
         {} as any,
         {} as any,
+        {} as any,
+        createRefreshTokenServiceMock() as any,
       );
 
       return { service, queryBuilder };
@@ -279,6 +298,92 @@ describe('UsersService', () => {
         nome: 'Ivan',
         email: 'ivan@example.com',
       });
+    });
+  });
+
+  describe('update', () => {
+    it('revokes all refresh tokens when bloqueado changes from false to true', async () => {
+      const {
+        service,
+        userRepository,
+        transactionUserRepository,
+        refreshTokenService,
+      } = buildServiceMocks();
+
+      userRepository.findOne.mockResolvedValue({
+        id: 2,
+        nome: 'User',
+        sobrenome: 'Test',
+        email: 'user@example.com',
+        bloqueado: false,
+      });
+      transactionUserRepository.save.mockImplementation((user) =>
+        Promise.resolve({ ...user, bloqueado: true }),
+      );
+
+      await service.update(
+        2,
+        { bloqueado: true },
+        { sub: 1, email: 'admin@example.com' },
+      );
+
+      expect(refreshTokenService.revokeAllForUser).toHaveBeenCalledWith(2);
+    });
+
+    it('does not revoke refresh tokens when bloqueado remains false', async () => {
+      const {
+        service,
+        userRepository,
+        transactionUserRepository,
+        refreshTokenService,
+      } = buildServiceMocks();
+
+      userRepository.findOne.mockResolvedValue({
+        id: 2,
+        nome: 'User',
+        sobrenome: 'Test',
+        email: 'user@example.com',
+        bloqueado: false,
+      });
+      transactionUserRepository.save.mockImplementation((user) =>
+        Promise.resolve(user),
+      );
+
+      await service.update(
+        2,
+        { nome: 'Updated' },
+        { sub: 1, email: 'admin@example.com' },
+      );
+
+      expect(refreshTokenService.revokeAllForUser).not.toHaveBeenCalled();
+    });
+
+    it('does not revoke refresh tokens when user is already blocked', async () => {
+      const {
+        service,
+        userRepository,
+        transactionUserRepository,
+        refreshTokenService,
+      } = buildServiceMocks();
+
+      userRepository.findOne.mockResolvedValue({
+        id: 2,
+        nome: 'User',
+        sobrenome: 'Test',
+        email: 'user@example.com',
+        bloqueado: true,
+      });
+      transactionUserRepository.save.mockImplementation((user) =>
+        Promise.resolve(user),
+      );
+
+      await service.update(
+        2,
+        { bloqueado: true, nome: 'Updated' },
+        { sub: 1, email: 'admin@example.com' },
+      );
+
+      expect(refreshTokenService.revokeAllForUser).not.toHaveBeenCalled();
     });
   });
 });

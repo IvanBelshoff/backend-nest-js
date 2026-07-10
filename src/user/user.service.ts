@@ -1,8 +1,10 @@
 import {
   BadRequestException,
   ForbiddenException,
+  Inject,
   Injectable,
   NotFoundException,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Usuario } from 'src/database/entities/Usuarios';
@@ -17,9 +19,16 @@ import { existsSync, statSync, unlinkSync } from 'fs';
 import { isAbsolute, join } from 'path';
 import { env } from '../shared/env.schema';
 import { UpdateUserDto } from './dto/update-user.dto';
+import type { UpdateUserPreferencesDto } from './dto/update-user-preferences.dto';
+import type { UsuarioPreferenciasUi } from './types/usuario-preferencias-ui.types';
+import {
+  mergeUsuarioPreferenciasUi,
+  resolveUsuarioPreferenciasUi,
+} from './usuario-preferencias-ui.util';
 import {
   assertRolePermissionAssignment,
 } from '../shared/services/RolePermissionPolicy';
+import { RefreshTokenService } from '../auth/refresh-token.service';
 
 export interface UserListParams {
   page: number;
@@ -60,6 +69,8 @@ export class UsersService {
     private dashboardRepository: Repository<Dashboard>,
     @InjectRepository(Relatorio)
     private relatorioRepository: Repository<Relatorio>,
+    @Inject(forwardRef(() => RefreshTokenService))
+    private readonly refreshTokenService: RefreshTokenService,
   ) {}
 
   async findAll(): Promise<Usuario[]> {
@@ -227,6 +238,8 @@ export class UsersService {
       throw new NotFoundException('Usuário não localizado');
     }
 
+    const wasBlocked = user.bloqueado;
+
     try {
       const updated = await this.userRepository.manager.transaction(
         async (manager) => {
@@ -270,6 +283,10 @@ export class UsersService {
           return userRepository.save(user);
         },
       );
+
+      if (dto.bloqueado === true && !wasBlocked) {
+        await this.refreshTokenService.revokeAllForUser(id);
+      }
 
       const { senha: _senha, ...rest } = updated;
       return rest;
@@ -873,6 +890,32 @@ export class UsersService {
 
   async updateUltimoLogin(id: number): Promise<void> {
     await this.userRepository.update(id, { ultimo_login: new Date() });
+  }
+
+  async getPreferences(id: number): Promise<UsuarioPreferenciasUi> {
+    const user = await this.userRepository.findOne({ where: { id } });
+
+    if (!user) {
+      throw new NotFoundException('Usuário não localizado');
+    }
+
+    return resolveUsuarioPreferenciasUi(user.preferencias_ui);
+  }
+
+  async updatePreferences(
+    id: number,
+    patch: UpdateUserPreferencesDto,
+  ): Promise<UsuarioPreferenciasUi> {
+    const user = await this.userRepository.findOne({ where: { id } });
+
+    if (!user) {
+      throw new NotFoundException('Usuário não localizado');
+    }
+
+    const merged = mergeUsuarioPreferenciasUi(user.preferencias_ui, patch);
+    await this.userRepository.update(id, { preferencias_ui: merged });
+
+    return merged;
   }
 
   async findPhotoFileByUserId(

@@ -14,6 +14,7 @@ import { Permissao } from './Permissoes';
 import { Regra } from './Regras';
 import { Dashboard } from './Dashboards';
 import { Relatorio } from './Relatorios';
+import type { UsuarioPreferenciasUi } from 'src/user/types/usuario-preferencias-ui.types';
 
 @Entity('usuarios')
 export class Usuario {
@@ -55,6 +56,9 @@ export class Usuario {
 
   @Column({ type: 'simple-array', nullable: true })
   relatorios_favoritos: number[];
+
+  @Column({ type: 'jsonb', nullable: true })
+  preferencias_ui: UsuarioPreferenciasUi | null;
 
   @ManyToMany(() => Permissao, (permissao) => permissao.usuario, {
     cascade: true,

@@ -160,6 +160,24 @@ describe('RefreshTokenService', () => {
     });
   });
 
+  it('revokes all active refresh tokens for a user', async () => {
+    const repository = createRepositoryMock();
+    const execute = jest.fn().mockResolvedValue(undefined);
+    const andWhere = jest.fn().mockReturnValue({ execute });
+    const where = jest.fn().mockReturnValue({ andWhere });
+    const set = jest.fn().mockReturnValue({ where });
+    repository.createQueryBuilder.mockReturnValue({ update: () => ({ set }) });
+
+    const service = createService(repository);
+    await service.revokeAllForUser(10);
+
+    expect(where).toHaveBeenCalledWith('usuario_id = :usuarioId', {
+      usuarioId: 10,
+    });
+    expect(andWhere).toHaveBeenCalledWith('revogado_em IS NULL');
+    expect(execute).toHaveBeenCalled();
+  });
+
   it('ignores logout when the refresh token is already revoked', async () => {
     const repository = createRepositoryMock();
     const rawToken = generateOpaqueRefreshToken();

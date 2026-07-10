@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { UsersService } from './user.service';
 import { UsersController } from './user.controller';
@@ -8,6 +8,7 @@ import { Regra } from '../database/entities/Regras';
 import { Permissao } from '../database/entities/Permissoes';
 import { Dashboard } from '../database/entities/Dashboards';
 import { Relatorio } from '../database/entities/Relatorios';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { Relatorio } from '../database/entities/Relatorios';
       Dashboard,
       Relatorio,
     ]),
+    forwardRef(() => AuthModule),
   ],
   controllers: [UsersController],
   providers: [UsersService],

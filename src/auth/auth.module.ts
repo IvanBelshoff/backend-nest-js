@@ -1,5 +1,5 @@
 
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthService } from './auth.service';
@@ -12,7 +12,7 @@ import { RefreshToken } from 'src/database/entities/RefreshTokens';
 
 @Module({
   imports: [
-    UsersModule,
+    forwardRef(() => UsersModule),
     TypeOrmModule.forFeature([RefreshToken]),
     JwtModule.register({
       global: true,
@@ -22,5 +22,6 @@ import { RefreshToken } from 'src/database/entities/RefreshTokens';
   ],
   providers: [...authProviders, AuthService, RefreshTokenService],
   controllers: [AuthController],
+  exports: [RefreshTokenService],
 })
 export class AuthModule {}

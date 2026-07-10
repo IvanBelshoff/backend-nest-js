@@ -9,6 +9,8 @@ import {
   type UserRbacDto,
 } from 'src/shared/services/map-user-rbac';
 import type { Usuario } from 'src/database/entities/Usuarios';
+import type { UsuarioPreferenciasUi } from 'src/user/types/usuario-preferencias-ui.types';
+import { resolveUsuarioPreferenciasUi } from 'src/user/usuario-preferencias-ui.util';
 
 export interface AuthSessionResult {
   access_token: string;
@@ -26,6 +28,7 @@ export type AuthProfileResult = {
   email: string;
   iat: number;
   exp: number;
+  preferencias_ui: UsuarioPreferenciasUi;
 } & UserRbacDto;
 
 @Injectable()
@@ -102,6 +105,7 @@ export class AuthService {
       exp: jwtPayload.exp,
       regras: rbac.regras,
       permissoes: rbac.permissoes,
+      preferencias_ui: resolveUsuarioPreferenciasUi(authUser.preferencias_ui),
     };
   }
 

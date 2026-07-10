@@ -46,7 +46,15 @@ export class AuthGuard implements CanActivate {
       if (payload.email && !request.authUser) {
         request.authUser = await this.usersService.findOne(payload.email);
       }
-    } catch {
+
+      if (!request.authUser || request.authUser.bloqueado) {
+        throw new UnauthorizedException();
+      }
+    } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
+
       throw new UnauthorizedException();
     }
 

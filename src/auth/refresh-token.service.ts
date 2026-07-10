@@ -54,7 +54,10 @@ export class RefreshTokenService {
       }
 
       if (storedToken.revogado_em) {
-        await this.revokeAllForUser(repository, storedToken.usuario_id);
+        await this.revokeAllForUserInRepository(
+          repository,
+          storedToken.usuario_id,
+        );
         throw new UnauthorizedException();
       }
 
@@ -103,7 +106,14 @@ export class RefreshTokenService {
     });
   }
 
-  private async revokeAllForUser(
+  async revokeAllForUser(usuarioId: number): Promise<void> {
+    await this.revokeAllForUserInRepository(
+      this.refreshTokenRepository,
+      usuarioId,
+    );
+  }
+
+  private async revokeAllForUserInRepository(
     repository: Repository<RefreshToken>,
     usuarioId: number,
   ): Promise<void> {

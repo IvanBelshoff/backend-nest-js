@@ -46,6 +46,10 @@ import {
   type UpdateFavoritesDto,
 } from './dto/update-favorites.dto';
 import {
+  updateUserPreferencesSchema,
+  type UpdateUserPreferencesDto,
+} from './dto/update-user-preferences.dto';
+import {
   assignDashboardsSchema,
   type AssignDashboardsDto,
 } from './dto/assign-dashboards.dto';
@@ -198,6 +202,16 @@ export class UsersController {
   @HttpCode(204)
   async copyRelatorios(@Body() dto: CopyRelatoriosDto) {
     await this.usersService.copyRelatorios(dto.id_usuario, dto.id_copiado);
+  }
+
+  @Patch('/preferences/:id')
+  @SelfOrAdmin()
+  @ZodValidation(updateUserPreferencesSchema)
+  async updatePreferences(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateUserPreferencesDto,
+  ) {
+    return this.usersService.updatePreferences(id, dto);
   }
 
   @Patch('/dashboards/favorites/:id')
