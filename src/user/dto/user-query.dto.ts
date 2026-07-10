@@ -5,7 +5,9 @@ export const userQuerySchema = createPaginationSchema(7, 200).extend({
   bloqueado: z
     .enum(['true', 'false'])
     .optional()
-    .transform((value) => value === 'true'),
+    .transform((value): boolean | undefined =>
+      value === undefined ? undefined : value === 'true',
+    ),
   regra: z.string().trim().optional(),
   permissao: z.string().trim().optional(),
 });

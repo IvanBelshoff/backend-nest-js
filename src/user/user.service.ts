@@ -25,9 +25,7 @@ import {
   mergeUsuarioPreferenciasUi,
   resolveUsuarioPreferenciasUi,
 } from './usuario-preferencias-ui.util';
-import {
-  assertRolePermissionAssignment,
-} from '../shared/services/RolePermissionPolicy';
+import { assertRolePermissionAssignment } from '../shared/services/RolePermissionPolicy';
 import { RefreshTokenService } from '../auth/refresh-token.service';
 
 export interface UserListParams {
@@ -54,6 +52,12 @@ export interface UsuariosByRelatorio {
   usuariosDisponiveis: Omit<Usuario, 'relatorio'>[];
 }
 
+export const BLOCKED_USER_OPERATION_MESSAGE =
+  'Operação não permitida pois o usuário está bloqueado';
+
+export const BLOCKED_USER_SOURCE_MESSAGE =
+  'Usuário de origem está bloqueado e não pode ser usado como referência';
+
 @Injectable()
 export class UsersService {
   constructor(
@@ -72,6 +76,32 @@ export class UsersService {
     @Inject(forwardRef(() => RefreshTokenService))
     private readonly refreshTokenService: RefreshTokenService,
   ) {}
+
+  private assertUserNotBlocked(user: Usuario): void {
+    if (user.bloqueado) {
+      throw new BadRequestException(BLOCKED_USER_OPERATION_MESSAGE);
+    }
+  }
+
+  private assertUserNotBlockedAsSource(user: Usuario): void {
+    if (user.bloqueado) {
+      throw new BadRequestException(BLOCKED_USER_SOURCE_MESSAGE);
+    }
+  }
+
+  private isUnblockOnlyUpdate(
+    user: Usuario,
+    dto: UpdateUserDto,
+    foto?: Express.Multer.File,
+  ): boolean {
+    return (
+      dto.bloqueado === false &&
+      !foto &&
+      (dto.nome === undefined || dto.nome === user.nome) &&
+      (dto.sobrenome === undefined || dto.sobrenome === user.sobrenome) &&
+      (dto.email === undefined || dto.email === user.email)
+    );
+  }
 
   async findAll(): Promise<Usuario[]> {
     return this.userRepository.find({ relations: { foto: true } });
@@ -240,6 +270,13 @@ export class UsersService {
 
     const wasBlocked = user.bloqueado;
 
+    if (wasBlocked && !this.isUnblockOnlyUpdate(user, dto, foto)) {
+      if (foto?.path && existsSync(foto.path)) {
+        unlinkSync(foto.path);
+      }
+      throw new BadRequestException(BLOCKED_USER_OPERATION_MESSAGE);
+    }
+
     try {
       const updated = await this.userRepository.manager.transaction(
         async (manager) => {
@@ -250,13 +287,15 @@ export class UsersService {
             where: { id: requester.sub },
           });
 
-          user.nome = dto.nome ?? user.nome;
-          user.sobrenome = dto.sobrenome ?? user.sobrenome;
-          user.email = dto.email ?? user.email;
-          user.bloqueado = dto.bloqueado ?? user.bloqueado;
-          user.usuario_atualizador = requesterUser
+          const nome = dto.nome ?? user.nome;
+          const sobrenome = dto.sobrenome ?? user.sobrenome;
+          const email = dto.email ?? user.email;
+          const bloqueado = dto.bloqueado ?? user.bloqueado;
+          const usuario_atualizador = requesterUser
             ? `${requesterUser.nome} ${requesterUser.sobrenome}`
             : 'Sistema';
+
+          let fotoEntity = user.foto;
 
           if (foto) {
             const previousLocal = user.foto?.local;
@@ -264,9 +303,9 @@ export class UsersService {
 
             if (user.foto) {
               Object.assign(user.foto, photoData);
-              user.foto = await fotoRepository.save(user.foto);
+              fotoEntity = await fotoRepository.save(user.foto);
             } else {
-              user.foto = await fotoRepository.save(
+              fotoEntity = await fotoRepository.save(
                 fotoRepository.create(photoData),
               );
             }
@@ -280,7 +319,25 @@ export class UsersService {
             }
           }
 
-          return userRepository.save(user);
+          await userRepository.update(id, {
+            nome,
+            sobrenome,
+            email,
+            bloqueado,
+            usuario_atualizador,
+            ...(fotoEntity ? { foto: { id: fotoEntity.id } } : {}),
+          });
+
+          const reloaded = await userRepository.findOne({
+            where: { id },
+            relations: { foto: true },
+          });
+
+          if (!reloaded) {
+            throw new NotFoundException('Usuário não localizado');
+          }
+
+          return reloaded;
         },
       );
 
@@ -289,6 +346,7 @@ export class UsersService {
       }
 
       const { senha: _senha, ...rest } = updated;
+
       return rest;
     } catch (error) {
       if (foto?.path && existsSync(foto.path)) {
@@ -304,6 +362,8 @@ export class UsersService {
     if (!user) {
       throw new NotFoundException('Usuário não localizado');
     }
+
+    this.assertUserNotBlocked(user);
 
     const hashedPassword = await bcrypt.hash(
       senha,
@@ -326,6 +386,8 @@ export class UsersService {
     if (!user) {
       throw new NotFoundException('Usuário não localizado');
     }
+
+    this.assertUserNotBlocked(user);
 
     const regras = regrasIds.length
       ? await this.regraRepository.find({
@@ -373,6 +435,8 @@ export class UsersService {
       throw new NotFoundException('Usuário não localizado');
     }
 
+    this.assertUserNotBlocked(target);
+
     const source = await this.userRepository.findOne({
       where: { id: idCopiado },
       relations: { regra: true, permissao: { regra: true } },
@@ -381,6 +445,8 @@ export class UsersService {
     if (!source) {
       throw new NotFoundException('Usuário copiado não localizado');
     }
+
+    this.assertUserNotBlockedAsSource(source);
 
     const sourceRegras = source.regra ?? [];
     const sourcePermissoes = source.permissao ?? [];
@@ -412,6 +478,8 @@ export class UsersService {
     if (!user?.foto) {
       throw new NotFoundException('Foto não localizada');
     }
+
+    this.assertUserNotBlocked(user);
 
     const previousLocal = user.foto.local;
 
@@ -473,6 +541,8 @@ export class UsersService {
       throw new NotFoundException('Usuário não localizado');
     }
 
+    this.assertUserNotBlocked(target);
+
     const source = await this.userRepository.findOne({
       where: { id: idCopiado },
       relations: { dashboard: true },
@@ -481,6 +551,8 @@ export class UsersService {
     if (!source) {
       throw new NotFoundException('Usuário copiado não localizado');
     }
+
+    this.assertUserNotBlockedAsSource(source);
 
     target.dashboard = source.dashboard ?? [];
 
@@ -496,6 +568,8 @@ export class UsersService {
     if (!user) {
       throw new NotFoundException('Usuário não localizado');
     }
+
+    this.assertUserNotBlocked(user);
 
     const validatedIds: number[] = [];
 
@@ -543,11 +617,7 @@ export class UsersService {
         throw new NotFoundException('Usuário não localizado');
       }
 
-      if (user.bloqueado) {
-        throw new BadRequestException(
-          'Operação não permitida pois o usuário está bloqueado',
-        );
-      }
+      this.assertUserNotBlocked(user);
 
       const dashboardEntities = dashboards.length
         ? await dashboardRepository.find({ where: { id: In(dashboards) } })
@@ -597,9 +667,7 @@ export class UsersService {
     });
   }
 
-  async getUsersByDashboard(
-    dashboardId: number,
-  ): Promise<UsuariosByDashboard> {
+  async getUsersByDashboard(dashboardId: number): Promise<UsuariosByDashboard> {
     const dashboard = await this.dashboardRepository.findOne({
       where: { id: dashboardId },
     });
@@ -648,6 +716,8 @@ export class UsersService {
       throw new NotFoundException('Usuário não localizado');
     }
 
+    this.assertUserNotBlocked(target);
+
     const source = await this.userRepository.findOne({
       where: { id: idCopiado },
       relations: { relatorio: true },
@@ -656,6 +726,8 @@ export class UsersService {
     if (!source) {
       throw new NotFoundException('Usuário copiado não localizado');
     }
+
+    this.assertUserNotBlockedAsSource(source);
 
     target.relatorio = source.relatorio ?? [];
     await this.userRepository.save(target);
@@ -673,6 +745,8 @@ export class UsersService {
     if (!user) {
       throw new NotFoundException('Usuário não localizado');
     }
+
+    this.assertUserNotBlocked(user);
 
     const validatedIds: number[] = [];
 
@@ -719,11 +793,7 @@ export class UsersService {
         throw new NotFoundException('Usuário não localizado');
       }
 
-      if (user.bloqueado) {
-        throw new BadRequestException(
-          'Operação não permitida pois o usuário está bloqueado',
-        );
-      }
+      this.assertUserNotBlocked(user);
 
       const relatorioEntities = relatorios.length
         ? await relatorioRepository.find({ where: { id: In(relatorios) } })
@@ -911,6 +981,8 @@ export class UsersService {
     if (!user) {
       throw new NotFoundException('Usuário não localizado');
     }
+
+    this.assertUserNotBlocked(user);
 
     const merged = mergeUsuarioPreferenciasUi(user.preferencias_ui, patch);
     await this.userRepository.update(id, { preferencias_ui: merged });

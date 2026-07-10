@@ -1,5 +1,9 @@
 import * as bcrypt from 'bcrypt';
-import { UsersService } from './user.service';
+import {
+  BLOCKED_USER_OPERATION_MESSAGE,
+  BLOCKED_USER_SOURCE_MESSAGE,
+  UsersService,
+} from './user.service';
 import { Usuario } from 'src/database/entities/Usuarios';
 
 describe('UsersService', () => {
@@ -24,6 +28,7 @@ describe('UsersService', () => {
         nome: 'Admin',
         sobrenome: 'User',
       }),
+      update: jest.fn().mockResolvedValue(undefined),
       save: jest.fn().mockImplementation((user) => {
         if (!user.id) {
           Object.assign(savedUser, user);
@@ -43,6 +48,8 @@ describe('UsersService', () => {
     };
     const userRepository = {
       findOne: jest.fn().mockResolvedValue(undefined),
+      update: jest.fn().mockResolvedValue(undefined),
+      save: jest.fn().mockImplementation((user) => Promise.resolve(user)),
       manager: {
         transaction: jest
           .fn()
@@ -58,6 +65,7 @@ describe('UsersService', () => {
     };
     const fotoRepository = {
       create: jest.fn().mockImplementation((foto) => foto),
+      save: jest.fn().mockImplementation((foto) => Promise.resolve(foto)),
     };
     const regraRepository = {};
     const permissaoRepository = {};
@@ -317,9 +325,19 @@ describe('UsersService', () => {
         email: 'user@example.com',
         bloqueado: false,
       });
-      transactionUserRepository.save.mockImplementation((user) =>
-        Promise.resolve({ ...user, bloqueado: true }),
-      );
+      transactionUserRepository.findOne
+        .mockResolvedValueOnce({
+          id: 1,
+          nome: 'Admin',
+          sobrenome: 'User',
+        })
+        .mockResolvedValueOnce({
+          id: 2,
+          nome: 'User',
+          sobrenome: 'Test',
+          email: 'user@example.com',
+          bloqueado: true,
+        });
 
       await service.update(
         2,
@@ -345,9 +363,19 @@ describe('UsersService', () => {
         email: 'user@example.com',
         bloqueado: false,
       });
-      transactionUserRepository.save.mockImplementation((user) =>
-        Promise.resolve(user),
-      );
+      transactionUserRepository.findOne
+        .mockResolvedValueOnce({
+          id: 1,
+          nome: 'Admin',
+          sobrenome: 'User',
+        })
+        .mockResolvedValueOnce({
+          id: 2,
+          nome: 'Updated',
+          sobrenome: 'Test',
+          email: 'user@example.com',
+          bloqueado: false,
+        });
 
       await service.update(
         2,
@@ -358,7 +386,29 @@ describe('UsersService', () => {
       expect(refreshTokenService.revokeAllForUser).not.toHaveBeenCalled();
     });
 
-    it('does not revoke refresh tokens when user is already blocked', async () => {
+    it('rejects profile updates when the user is already blocked', async () => {
+      const { service, userRepository, refreshTokenService } = buildServiceMocks();
+
+      userRepository.findOne.mockResolvedValue({
+        id: 2,
+        nome: 'User',
+        sobrenome: 'Test',
+        email: 'user@example.com',
+        bloqueado: true,
+      });
+
+      await expect(
+        service.update(
+          2,
+          { bloqueado: true, nome: 'Updated' },
+          { sub: 1, email: 'admin@example.com' },
+        ),
+      ).rejects.toThrow(BLOCKED_USER_OPERATION_MESSAGE);
+
+      expect(refreshTokenService.revokeAllForUser).not.toHaveBeenCalled();
+    });
+
+    it('allows unblock-only updates for blocked users', async () => {
       const {
         service,
         userRepository,
@@ -373,17 +423,187 @@ describe('UsersService', () => {
         email: 'user@example.com',
         bloqueado: true,
       });
-      transactionUserRepository.save.mockImplementation((user) =>
-        Promise.resolve(user),
-      );
+      transactionUserRepository.findOne
+        .mockResolvedValueOnce({
+          id: 1,
+          nome: 'Admin',
+          sobrenome: 'User',
+        })
+        .mockResolvedValueOnce({
+          id: 2,
+          nome: 'User',
+          sobrenome: 'Test',
+          email: 'user@example.com',
+          bloqueado: false,
+        });
 
       await service.update(
         2,
-        { bloqueado: true, nome: 'Updated' },
+        { bloqueado: false },
         { sub: 1, email: 'admin@example.com' },
       );
 
+      expect(transactionUserRepository.update).toHaveBeenCalledWith(
+        2,
+        expect.objectContaining({ bloqueado: false }),
+      );
       expect(refreshTokenService.revokeAllForUser).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('updatePassword', () => {
+    it('rejects password updates when the user is blocked', async () => {
+      const { service, userRepository } = buildServiceMocks();
+
+      userRepository.findOne.mockResolvedValue({
+        id: 2,
+        bloqueado: true,
+      });
+
+      await expect(service.updatePassword(2, 'nova-senha-segura')).rejects.toThrow(
+        BLOCKED_USER_OPERATION_MESSAGE,
+      );
+    });
+  });
+
+  describe('deletePhoto', () => {
+    it('rejects photo deletion when the user is blocked', async () => {
+      const { service, userRepository } = buildServiceMocks();
+
+      userRepository.findOne.mockResolvedValue({
+        id: 2,
+        bloqueado: true,
+        foto: { id: 1, local: 'photo.jpg' },
+      });
+
+      await expect(service.deletePhoto(2)).rejects.toThrow(
+        BLOCKED_USER_OPERATION_MESSAGE,
+      );
+    });
+  });
+
+  describe('copyDashboards', () => {
+    it('rejects copying when the target user is blocked', async () => {
+      const { service, userRepository } = buildServiceMocks();
+
+      userRepository.findOne.mockImplementation(({ where }: { where: { id: number } }) => {
+        if (where.id === 2) {
+          return Promise.resolve({ id: 2, bloqueado: true });
+        }
+
+        return Promise.resolve({
+          id: 3,
+          bloqueado: false,
+          dashboard: [],
+        });
+      });
+
+      await expect(service.copyDashboards(2, 3)).rejects.toThrow(
+        BLOCKED_USER_OPERATION_MESSAGE,
+      );
+    });
+
+    it('rejects copying when the source user is blocked', async () => {
+      const { service, userRepository } = buildServiceMocks();
+
+      userRepository.findOne.mockImplementation(({ where }: { where: { id: number } }) => {
+        if (where.id === 2) {
+          return Promise.resolve({ id: 2, bloqueado: false });
+        }
+
+        return Promise.resolve({
+          id: 3,
+          bloqueado: true,
+          dashboard: [],
+        });
+      });
+
+      await expect(service.copyDashboards(2, 3)).rejects.toThrow(
+        BLOCKED_USER_SOURCE_MESSAGE,
+      );
+    });
+  });
+
+  describe('copyRelatorios', () => {
+    it('rejects copying when the source user is blocked', async () => {
+      const { service, userRepository } = buildServiceMocks();
+
+      userRepository.findOne.mockImplementation(({ where }: { where: { id: number } }) => {
+        if (where.id === 2) {
+          return Promise.resolve({ id: 2, bloqueado: false });
+        }
+
+        return Promise.resolve({
+          id: 3,
+          bloqueado: true,
+          relatorio: [],
+        });
+      });
+
+      await expect(service.copyRelatorios(2, 3)).rejects.toThrow(
+        BLOCKED_USER_SOURCE_MESSAGE,
+      );
+    });
+  });
+
+  describe('updateRolesAndPermissions', () => {
+    it('rejects updates when the user is blocked', async () => {
+      const { service, userRepository } = buildServiceMocks();
+
+      userRepository.findOne.mockResolvedValue({
+        id: 2,
+        bloqueado: true,
+        regra: [],
+        permissao: [],
+      });
+
+      await expect(service.updateRolesAndPermissions(2, [1], [2])).rejects.toThrow(
+        BLOCKED_USER_OPERATION_MESSAGE,
+      );
+    });
+  });
+
+  describe('copyRolesAndPermissions', () => {
+    it('rejects copying when the target user is blocked', async () => {
+      const { service, userRepository } = buildServiceMocks();
+
+      userRepository.findOne.mockImplementation(({ where }: { where: { id: number } }) => {
+        if (where.id === 2) {
+          return Promise.resolve({ id: 2, bloqueado: true });
+        }
+
+        return Promise.resolve({
+          id: 3,
+          bloqueado: false,
+          regra: [],
+          permissao: [],
+        });
+      });
+
+      await expect(service.copyRolesAndPermissions(2, 3)).rejects.toThrow(
+        BLOCKED_USER_OPERATION_MESSAGE,
+      );
+    });
+
+    it('rejects copying when the source user is blocked', async () => {
+      const { service, userRepository } = buildServiceMocks();
+
+      userRepository.findOne.mockImplementation(({ where }: { where: { id: number } }) => {
+        if (where.id === 2) {
+          return Promise.resolve({ id: 2, bloqueado: false });
+        }
+
+        return Promise.resolve({
+          id: 3,
+          bloqueado: true,
+          regra: [],
+          permissao: [],
+        });
+      });
+
+      await expect(service.copyRolesAndPermissions(2, 3)).rejects.toThrow(
+        BLOCKED_USER_SOURCE_MESSAGE,
+      );
     });
   });
 });
