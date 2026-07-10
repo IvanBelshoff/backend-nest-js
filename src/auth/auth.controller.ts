@@ -48,7 +48,12 @@ export class AuthController {
   })
   @ApiOkResponse({
     schema: {
-      example: { access_token: 'jwt...', expires_in: 3600 },
+      example: {
+        access_token: 'jwt...',
+        expires_in: 3600,
+        regras: ['REGRA_ADMIN'],
+        permissoes: [],
+      },
     },
   })
   @ApiUnauthorizedResponse()
@@ -67,6 +72,8 @@ export class AuthController {
     return {
       access_token: session.access_token,
       expires_in: session.expires_in,
+      regras: session.regras,
+      permissoes: session.permissoes,
     };
   }
 
@@ -120,12 +127,24 @@ export class AuthController {
 
   @Get('profile')
   @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'Retorna payload JWT do usuário autenticado' })
+  @ApiOperation({ summary: 'Retorna perfil do usuário autenticado com regras e permissões' })
+  @ApiOkResponse({
+    schema: {
+      example: {
+        sub: 1,
+        email: 'admin@silexcode.com',
+        iat: 1710000000,
+        exp: 1710001200,
+        regras: ['REGRA_ADMIN'],
+        permissoes: [],
+      },
+    },
+  })
   getProfile(@Request() req: UserRequest.UserRequest) {
-    if (!req.user) {
+    if (!req.user || !req.authUser) {
       return null;
     }
 
-    return req.user;
+    return this.authService.buildProfile(req.user, req.authUser);
   }
 }

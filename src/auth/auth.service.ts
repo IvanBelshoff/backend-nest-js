@@ -4,15 +4,29 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { RefreshTokenService } from './refresh-token.service';
 import { jwtConstants } from './constants';
+import {
+  mapUserRbac,
+  type UserRbacDto,
+} from 'src/shared/services/map-user-rbac';
+import type { Usuario } from 'src/database/entities/Usuarios';
 
 export interface AuthSessionResult {
   access_token: string;
   expires_in: number;
+  regras: string[];
+  permissoes: string[];
   refreshToken: {
     rawToken: string;
     expiresAt: Date;
   };
 }
+
+export type AuthProfileResult = {
+  sub: number;
+  email: string;
+  iat: number;
+  exp: number;
+} & UserRbacDto;
 
 @Injectable()
 export class AuthService {
@@ -41,10 +55,13 @@ export class AuthService {
     await this.usersService.updateUltimoLogin(user.id);
 
     const payload = { sub: user.id, email: user.email };
+    const rbac = mapUserRbac(user);
 
     return {
       access_token: await this.jwtService.signAsync(payload),
       expires_in: jwtConstants.expiresInSeconds,
+      regras: rbac.regras,
+      permissoes: rbac.permissoes,
       refreshToken,
     };
   }
@@ -63,10 +80,28 @@ export class AuthService {
     return {
       access_token: await this.jwtService.signAsync(payload),
       expires_in: jwtConstants.expiresInSeconds,
+      regras: [],
+      permissoes: [],
       refreshToken: {
         rawToken: rotated.rawToken,
         expiresAt: rotated.expiresAt,
       },
+    };
+  }
+
+  buildProfile(
+    jwtPayload: { sub: number; email: string; iat: number; exp: number },
+    authUser: Usuario,
+  ): AuthProfileResult {
+    const rbac = mapUserRbac(authUser);
+
+    return {
+      sub: jwtPayload.sub,
+      email: jwtPayload.email,
+      iat: jwtPayload.iat,
+      exp: jwtPayload.exp,
+      regras: rbac.regras,
+      permissoes: rbac.permissoes,
     };
   }
 
