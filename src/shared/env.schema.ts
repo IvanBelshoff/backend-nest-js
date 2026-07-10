@@ -81,6 +81,16 @@ export const envSchema = z.object({
     .string()
     .optional()
     .transform((value) => value === 'true'),
+  METRICS_ENABLED: z
+    .string()
+    .optional()
+    .transform((value) => value !== 'false'),
+  METRICS_COLLECTION_INTERVAL_SECONDS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(60),
+  METRICS_RETENTION_DAYS: z.coerce.number().int().positive().default(7),
 });
 
 export type Env = z.infer<typeof envSchema>;

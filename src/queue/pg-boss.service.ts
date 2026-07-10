@@ -118,6 +118,28 @@ export class PgBossService implements OnModuleInit, OnModuleDestroy {
     return jobId;
   }
 
+  async getQueueMetrics(queueNames: string[]): Promise<
+    Array<{
+      name: string;
+      pending: number;
+      active: number;
+      failed: number;
+    }>
+  > {
+    if (!this.isEnabled || !this.boss) {
+      return [];
+    }
+
+    const queues = await this.boss.getQueues(queueNames);
+
+    return queues.map((queue) => ({
+      name: queue.name,
+      pending: queue.readyCount,
+      active: queue.activeCount,
+      failed: queue.failedCount,
+    }));
+  }
+
   async getJobById<T extends object>(
     queueName: string,
     jobId: string,
