@@ -89,5 +89,24 @@ export const AUTH_ENDPOINT_MATRIX = {
     'DELETE /relatorios/:id': {
       permission: ['PERMISSAO_EXCLUIR_RELATORIO'],
     },
+    'POST /relatorios/:id/agendamento-snapshot': {
+      permission: ['PERMISSAO_ATUALIZAR_RELATORIO'],
+    },
+    'GET /relatorios/:id/agendamento-snapshot': { role: ['REGRA_RELATORIO'] },
+    'DELETE /relatorios/:id/agendamento-snapshot': {
+      permission: ['PERMISSAO_ATUALIZAR_RELATORIO'],
+    },
+    'GET /relatorios/:id/agendamento-snapshot/execucoes': {
+      role: ['REGRA_RELATORIO'],
+    },
+  },
+  agendamentos: {
+    'POST /agendamentos': { role: ['REGRA_ADMIN'] },
+    'PATCH /agendamentos/:id': { role: ['REGRA_ADMIN'] },
+    'DELETE /agendamentos/:id': { role: ['REGRA_ADMIN'] },
+    'POST /agendamentos/:id/vinculos': { role: ['REGRA_ADMIN'] },
+    'DELETE /agendamentos/vinculos/:vinculoId': { role: ['REGRA_ADMIN'] },
+    'GET /agendamentos/vinculos': { role: ['REGRA_ADMIN'] },
+    'GET /agendamentos/vinculos/:vinculoId/execucoes': { role: ['REGRA_ADMIN'] },
   },
 } as const;

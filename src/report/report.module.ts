@@ -5,6 +5,8 @@ import { Relatorio } from 'src/database/entities/Relatorios';
 import { Usuario } from 'src/database/entities/Usuarios';
 import { ConnectionModule } from 'src/connection/connection.module';
 import { QueueModule } from 'src/queue/queue.module';
+import { SchedulerModule } from 'src/scheduler/scheduler.module';
+import { ReportSnapshotRefreshHandler } from 'src/scheduler/handlers/report-snapshot-refresh.handler';
 import { ReportController } from './report.controller';
 import { ReportService } from './report.service';
 import { ReportSnapshotService } from './report-snapshot.service';
@@ -26,6 +28,7 @@ import { SnapshotCleanupService } from './storage/snapshot-cleanup.service';
     TypeOrmModule.forFeature([Relatorio, Usuario, Conexao, RelatorioJob]),
     ConnectionModule,
     QueueModule,
+    SchedulerModule,
   ],
   controllers: [ReportController, ReportJobController],
   providers: [
@@ -36,6 +39,7 @@ import { SnapshotCleanupService } from './storage/snapshot-cleanup.service';
     ReportExportService,
     ReportSnapshotWorker,
     ReportExportWorker,
+    ReportSnapshotRefreshHandler,
     DuckDbService,
     SnapshotQueryService,
     SnapshotCleanupService,

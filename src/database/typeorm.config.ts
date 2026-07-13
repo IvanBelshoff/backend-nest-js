@@ -7,6 +7,9 @@ import { RefreshToken } from './entities/RefreshTokens';
 import { Regra } from './entities/Regras';
 import { Relatorio } from './entities/Relatorios';
 import { RelatorioJob } from './entities/RelatorioJobs';
+import { Agendamento } from '../scheduler/entities/Agendamento';
+import { AgendamentoVinculo } from '../scheduler/entities/AgendamentoVinculo';
+import { AgendamentoExecucao } from '../scheduler/entities/AgendamentoExecucao';
 import { Usuario } from './entities/Usuarios';
 
 export const entities = [
@@ -18,6 +21,9 @@ export const entities = [
   Conexao,
   Relatorio,
   RelatorioJob,
+  Agendamento,
+  AgendamentoVinculo,
+  AgendamentoExecucao,
   RefreshToken,
 ];
 

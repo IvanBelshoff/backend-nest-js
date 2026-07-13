@@ -20,6 +20,8 @@ import { Usuario } from 'src/database/entities/Usuarios';
 import { env } from 'src/shared/env.schema';
 import { CreateReportDto, UpdateReportDto } from './dto/create-report.dto';
 import { ReportSnapshotService } from './report-snapshot.service';
+import { SchedulerService } from 'src/scheduler/scheduler.service';
+import { AgendamentoVinculoTipo } from 'src/scheduler/entities/scheduler.enums';
 
 interface Requester {
   sub: number;
@@ -58,6 +60,7 @@ export class ReportService {
     private readonly conexaoRepository: Repository<Conexao>,
     @Inject(forwardRef(() => ReportSnapshotService))
     private readonly reportSnapshotService: ReportSnapshotService,
+    private readonly schedulerService: SchedulerService,
   ) {}
 
   async create(dto: CreateReportDto, requester: Requester): Promise<Relatorio> {
@@ -332,6 +335,11 @@ export class ReportService {
     } else if (dto.estado === EstadoRelatorio.ONLINE) {
       relatorio.estado = EstadoRelatorio.ONLINE;
       await this.reportSnapshotService.deleteSnapshot(id);
+      await this.schedulerService.pauseVinculoByEntity(
+        'relatorio',
+        id,
+        AgendamentoVinculoTipo.REPORT_SNAPSHOT_REFRESH,
+      );
     } else if (dto.estado) {
       relatorio.estado = dto.estado;
     }

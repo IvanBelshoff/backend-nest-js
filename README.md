@@ -35,7 +35,8 @@ Todas as variáveis obrigatórias estão documentadas em [`.env.example`](.env.e
 | `REGRAS_PERMISSOES` | JSON de roles → permissões |
 | `SYNC_ROLES_ON_STARTUP` | Sincronizar RBAC no bootstrap |
 | `SWAGGER_ENABLED` | Força `/docs` mesmo em production |
-| `PG_BOSS_*` | Filas pg-boss (schema, filas snapshot/export) |
+| `PG_BOSS_*` | Filas pg-boss (schema, filas snapshot/export/dispatch) |
+| `SCHEDULER_DISPATCH_QUEUE_NAME` | Fila do dispatcher de agendamentos (default `scheduler.dispatch`) |
 | `REPORT_EXPORT_DIR` | Diretório local dos CSVs exportados |
 | `STORAGE_DRIVER` | Driver de snapshots Parquet (`local`) |
 | `SNAPSHOT_STORAGE_DIR` | Diretório dos arquivos Parquet |
@@ -66,6 +67,8 @@ Snapshots legados (sem `storage_key`) são marcados inválidos no bootstrap e pr
 ## Filas (pg-boss)
 
 Snapshots e exportações CSV rodam em filas **pg-boss** no mesmo PostgreSQL da aplicação. API e workers iniciam no **mesmo processo** NestJS (`npm run start:dev`).
+
+Agendamentos recorrentes (ex.: refresh de snapshot offline) usam `boss.schedule` na fila `scheduler.dispatch` (variável `SCHEDULER_DISPATCH_QUEUE_NAME`). O dispatcher delega ao handler pelo tipo do vínculo (`report_snapshot_refresh` na v1).
 
 - Schema `pgboss` criado automaticamente pelo pg-boss
 - Tabela `relatorio_jobs` — entidade `RelatorioJobs` em `src/database/entities/`

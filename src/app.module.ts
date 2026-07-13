@@ -11,6 +11,7 @@ import { PermissionModule } from './permission/permission.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { ConnectionModule } from './connection/connection.module';
 import { ReportModule } from './report/report.module';
+import { SchedulerModule } from './scheduler/scheduler.module';
 import { QueueModule } from './queue/queue.module';
 import { IconModule } from './icon/icon.module';
 import { SystemMetricsModule } from './system-metrics/system-metrics.module';
@@ -51,6 +52,7 @@ const isThrottlingEnabled = env.NODE_ENV !== 'development';
     DashboardModule,
     ConnectionModule,
     QueueModule,
+    SchedulerModule,
     ReportModule,
     IconModule,
     SystemMetricsModule,

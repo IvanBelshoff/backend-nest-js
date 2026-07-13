@@ -67,6 +67,10 @@ export const envSchema = z.object({
   REPORT_EXPORT_QUEUE_NAME: z.string().min(1).default('report.export.csv'),
   REPORT_EXPORT_QUEUE_CONCURRENCY: z.coerce.number().int().positive().default(3),
   REPORT_EXPORT_RETRY_LIMIT: z.coerce.number().int().nonnegative().default(2),
+  SCHEDULER_DISPATCH_QUEUE_NAME: z
+    .string()
+    .min(1)
+    .default('scheduler.dispatch'),
   REPORT_EXPORT_DIR: z.string().min(1).default('src/shared/data/exports'),
   REPORT_EXPORT_TTL_HOURS: z.coerce.number().int().positive().default(24),
   STORAGE_DRIVER: z.enum(['local']).default('local'),

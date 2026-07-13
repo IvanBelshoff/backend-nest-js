@@ -59,6 +59,12 @@ import { ReportExportService } from './export/report-export.service';
 import { SnapshotQueryService } from './snapshot-query.service';
 import { ReportSnapshotService } from './report-snapshot.service';
 import { ReportListParams, ReportService } from './report.service';
+import { SchedulerService } from 'src/scheduler/scheduler.service';
+import {
+  createReportSnapshotScheduleSchema,
+  type CreateReportSnapshotScheduleDto,
+} from 'src/scheduler/dto/create-report-snapshot-schedule.dto';
+import { AgendamentoVinculoTipo } from 'src/scheduler/entities/scheduler.enums';
 import { ApiBearerAuth, ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
 
 @Controller('relatorios')
@@ -70,6 +76,7 @@ export class ReportController {
     private readonly snapshotQueryService: SnapshotQueryService,
     private readonly reportSnapshotService: ReportSnapshotService,
     private readonly reportExportService: ReportExportService,
+    private readonly schedulerService: SchedulerService,
   ) {}
 
   @Post('/')
@@ -290,6 +297,46 @@ export class ReportController {
       id,
       req.user,
       dto.parametros_snapshot,
+    );
+  }
+
+  @Post('/:id/agendamento-snapshot')
+  @Authorization('permission', ['PERMISSAO_ATUALIZAR_RELATORIO'])
+  @ZodValidation(createReportSnapshotScheduleSchema)
+  async createSnapshotSchedule(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: CreateReportSnapshotScheduleDto,
+    @Request() req: UserRequest.UserRequest,
+  ) {
+    if (!req.user) throw new UnauthorizedException();
+    return this.schedulerService.createReportSnapshotSchedule(
+      id,
+      req.user.sub,
+      dto,
+      req.user,
+    );
+  }
+
+  @Get('/:id/agendamento-snapshot')
+  @Authorization('role', ['REGRA_RELATORIO'])
+  async getSnapshotSchedule(@Param('id', ParseIntPipe) id: number) {
+    return this.schedulerService.getReportSnapshotSchedule(id);
+  }
+
+  @Delete('/:id/agendamento-snapshot')
+  @Authorization('permission', ['PERMISSAO_ATUALIZAR_RELATORIO'])
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deleteSnapshotSchedule(@Param('id', ParseIntPipe) id: number) {
+    await this.schedulerService.deleteReportSnapshotSchedule(id);
+  }
+
+  @Get('/:id/agendamento-snapshot/execucoes')
+  @Authorization('role', ['REGRA_RELATORIO'])
+  async listSnapshotScheduleExecutions(@Param('id', ParseIntPipe) id: number) {
+    return this.schedulerService.listExecucoesByEntity(
+      'relatorio',
+      id,
+      AgendamentoVinculoTipo.REPORT_SNAPSHOT_REFRESH,
     );
   }
 

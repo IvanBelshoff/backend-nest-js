@@ -4,11 +4,12 @@ import {
   OnModuleDestroy,
   OnModuleInit,
 } from '@nestjs/common';
-import { PgBoss, type JobWithMetadata, type SendOptions } from 'pg-boss';
+import { PgBoss, type JobWithMetadata, type ScheduleOptions, type SendOptions } from 'pg-boss';
 import { buildPgConnectionString } from './pg-connection.util';
 import {
   REPORT_EXPORT_QUEUE,
   REPORT_SNAPSHOT_QUEUE,
+  SCHEDULER_DISPATCH_QUEUE,
 } from './queue.constants';
 import { env } from 'src/shared/env.schema';
 
@@ -74,6 +75,11 @@ export class PgBossService implements OnModuleInit, OnModuleDestroy {
       retryLimit: env.REPORT_EXPORT_RETRY_LIMIT,
       retryDelay: 30,
     });
+
+    await this.boss.createQueue(SCHEDULER_DISPATCH_QUEUE, {
+      retryLimit: 2,
+      retryDelay: 30,
+    });
   }
 
   private async registerWorker(
@@ -87,7 +93,9 @@ export class PgBossService implements OnModuleInit, OnModuleDestroy {
     const concurrency =
       queueName === REPORT_SNAPSHOT_QUEUE
         ? env.REPORT_SNAPSHOT_QUEUE_CONCURRENCY
-        : env.REPORT_EXPORT_QUEUE_CONCURRENCY;
+        : queueName === SCHEDULER_DISPATCH_QUEUE
+          ? 1
+          : env.REPORT_EXPORT_QUEUE_CONCURRENCY;
 
     await this.boss.work(
       queueName,
@@ -153,5 +161,26 @@ export class PgBossService implements OnModuleInit, OnModuleDestroy {
     });
 
     return jobs[0] ?? null;
+  }
+
+  async schedule<T extends object>(
+    queueName: string,
+    cron: string,
+    data: T,
+    options: ScheduleOptions = {},
+  ): Promise<void> {
+    if (!this.isEnabled || !this.boss) {
+      throw new Error('pg-boss não está habilitado');
+    }
+
+    await this.boss.schedule(queueName, cron, data, options);
+  }
+
+  async unschedule(queueName: string, key?: string): Promise<void> {
+    if (!this.isEnabled || !this.boss) {
+      return;
+    }
+
+    await this.boss.unschedule(queueName, key);
   }
 }
