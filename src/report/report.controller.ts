@@ -56,6 +56,7 @@ import {
 import { ReportExecutionService } from './execution/report-execution.service';
 import { exportReportSchema, type ExportReportDto } from './jobs/dto/export-report.dto';
 import { ReportExportService } from './export/report-export.service';
+import { ReportJobService } from './jobs/report-job.service';
 import { SnapshotQueryService } from './snapshot-query.service';
 import { ReportSnapshotService } from './report-snapshot.service';
 import { ReportListParams, ReportService } from './report.service';
@@ -76,6 +77,7 @@ export class ReportController {
     private readonly snapshotQueryService: SnapshotQueryService,
     private readonly reportSnapshotService: ReportSnapshotService,
     private readonly reportExportService: ReportExportService,
+    private readonly reportJobService: ReportJobService,
     private readonly schedulerService: SchedulerService,
   ) {}
 
@@ -298,6 +300,14 @@ export class ReportController {
       req.user,
       dto.parametros_snapshot,
     );
+  }
+
+  @Get('/:id/snapshot/historico')
+  @Authorization('role', ['REGRA_RELATORIO'])
+  @ApiOperation({ summary: 'Histórico unificado de snapshots do relatório' })
+  async listSnapshotHistory(@Param('id', ParseIntPipe) id: number) {
+    const items = await this.reportJobService.listSnapshotHistoryForReport(id);
+    return { items };
   }
 
   @Post('/:id/agendamento-snapshot')

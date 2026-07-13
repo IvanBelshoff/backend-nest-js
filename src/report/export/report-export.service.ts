@@ -13,6 +13,7 @@ import {
   RelatorioJobTipo,
 } from 'src/database/entities/RelatorioJobs';
 import { ReportJobService } from '../jobs/report-job.service';
+import { resolveJobExpireInSeconds } from '../jobs/report-job-expire.util';
 import { ReportService } from '../report.service';
 import { ReportSnapshotService } from '../report-snapshot.service';
 import { DuckDbService } from '../duckdb/duckdb.service';
@@ -37,7 +38,7 @@ export class ReportExportService {
     userId: number,
     parametros: Record<string, unknown>,
   ): Promise<string> {
-    await this.reportService.findById(relatorioId, userId);
+    const relatorio = await this.reportService.findById(relatorioId, userId);
 
     const payload: ExportJobPayload = {
       relatorioId,
@@ -48,6 +49,7 @@ export class ReportExportService {
 
     const jobId = await this.pgBossService.send(REPORT_EXPORT_QUEUE, payload, {
       singletonKey: `export-csv-${relatorioId}-${userId}`,
+      expireInSeconds: resolveJobExpireInSeconds(relatorio.timeout_ms),
     });
 
     await this.reportJobService.createJob({

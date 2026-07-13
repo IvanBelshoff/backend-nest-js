@@ -8,6 +8,7 @@ import {
   Inject,
   Injectable,
   Logger,
+  NotFoundException,
   OnApplicationBootstrap,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
@@ -24,6 +25,7 @@ import type { SnapshotJobPayload } from 'src/queue/types/snapshot-job.payload';
 import { env } from 'src/shared/env.schema';
 import { RelatorioJobTipo } from 'src/database/entities/RelatorioJobs';
 import { ReportJobService } from './jobs/report-job.service';
+import { resolveJobExpireInSeconds } from './jobs/report-job-expire.util';
 import { RelatorioSnapshot } from './schemas/relatorio-snapshot.schema';
 import { ReportExecutionService } from './execution/report-execution.service';
 import { DuckDbService } from './duckdb/duckdb.service';
@@ -228,13 +230,21 @@ export class ReportSnapshotService implements OnApplicationBootstrap {
     userId: number,
     parametrosSnapshot: Record<string, unknown> = {},
   ): Promise<string> {
+    const relatorio = await this.relatorioRepository.findOne({
+      where: { id: relatorioId },
+    });
+
+    if (!relatorio) {
+      throw new NotFoundException('Relatório não localizado');
+    }
+
     const payload: SnapshotJobPayload = {
       relatorioId,
       userId,
       parametrosSnapshot,
     };
 
-    const expireInSeconds = Math.ceil(env.REPORT_QUERY_TIMEOUT_MS / 1000) + 300;
+    const expireInSeconds = resolveJobExpireInSeconds(relatorio.timeout_ms);
 
     const jobId = await this.pgBossService.send(
       REPORT_SNAPSHOT_QUEUE,

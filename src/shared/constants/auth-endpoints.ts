@@ -86,6 +86,7 @@ export const AUTH_ENDPOINT_MATRIX = {
     'POST /relatorios/:id/snapshot/atualizar': {
       permission: ['PERMISSAO_ATUALIZAR_RELATORIO'],
     },
+    'GET /relatorios/:id/snapshot/historico': { role: ['REGRA_RELATORIO'] },
     'DELETE /relatorios/:id': {
       permission: ['PERMISSAO_EXCLUIR_RELATORIO'],
     },
@@ -108,5 +109,12 @@ export const AUTH_ENDPOINT_MATRIX = {
     'DELETE /agendamentos/vinculos/:vinculoId': { role: ['REGRA_ADMIN'] },
     'GET /agendamentos/vinculos': { role: ['REGRA_ADMIN'] },
     'GET /agendamentos/vinculos/:vinculoId/execucoes': { role: ['REGRA_ADMIN'] },
+  },
+  admin: {
+    'GET /admin/metrics/live': { role: ['REGRA_ADMIN'] },
+    'GET /admin/metrics/current': { role: ['REGRA_ADMIN'] },
+    'GET /admin/metrics/history': { role: ['REGRA_ADMIN'] },
+    'GET /admin/jobs': { role: ['REGRA_ADMIN'] },
+    'GET /admin/jobs/schedules': { role: ['REGRA_ADMIN'] },
   },
 } as const;

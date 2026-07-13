@@ -46,7 +46,7 @@ export const envSchema = z.object({
   MONGO_URI: z.string().min(1),
   MONGO_DB_NAME: z.string().min(1),
   CONNECTION_ENCRYPTION_KEY: z.string().min(1),
-  REPORT_QUERY_TIMEOUT_MS: z.coerce.number().int().positive().default(30000),
+  REPORT_QUERY_TIMEOUT_MS: z.coerce.number().int().positive().default(600000),
   REPORT_QUERY_MAX_ROWS: z.coerce.number().int().positive().default(10000),
   PG_BOSS_ENABLED: z
     .string()

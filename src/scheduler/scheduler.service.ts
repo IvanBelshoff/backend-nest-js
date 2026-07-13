@@ -5,13 +5,16 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Agendamento } from './entities/Agendamento';
 import { AgendamentoExecucao } from './entities/AgendamentoExecucao';
 import { AgendamentoVinculo } from './entities/AgendamentoVinculo';
 import {
+  AgendamentoExecucaoStatus,
   AgendamentoVinculoTipo,
 } from './entities/scheduler.enums';
+import { Relatorio } from 'src/database/entities/Relatorios';
+import type { ListAdminScheduleExecutionsQueryDto } from 'src/admin-jobs/dto/list-admin-schedule-executions-query.dto';
 import { ScheduleCronBuilder } from './schedule-cron.builder';
 import { ScheduleSyncService } from './schedule-sync.service';
 import { CreateAgendamentoDto } from './dto/create-agendamento.dto';
@@ -22,6 +25,26 @@ import { CreateReportSnapshotScheduleDto } from './dto/create-report-snapshot-sc
 interface Requester {
   sub: number;
   email: string;
+}
+
+export interface AdminScheduleExecutionItem {
+  id: number;
+  vinculoId: number;
+  status: AgendamentoExecucaoStatus;
+  jobId: string | null;
+  erro: string | null;
+  iniciadoEm: Date;
+  concluidoEm: Date | null;
+  relatorioId: number | null;
+  relatorioNome: string | null;
+  agendamentoNome: string;
+}
+
+export interface AdminScheduleExecutionListResult {
+  items: AdminScheduleExecutionItem[];
+  page: number;
+  pageSize: number;
+  total: number;
 }
 
 @Injectable()
@@ -35,6 +58,8 @@ export class SchedulerService {
     private readonly vinculoRepository: Repository<AgendamentoVinculo>,
     @InjectRepository(AgendamentoExecucao)
     private readonly execucaoRepository: Repository<AgendamentoExecucao>,
+    @InjectRepository(Relatorio)
+    private readonly relatorioRepository: Repository<Relatorio>,
     private readonly scheduleSyncService: ScheduleSyncService,
   ) {}
 
@@ -347,6 +372,91 @@ export class SchedulerService {
     if (remaining === 0) {
       await this.agendamentoRepository.delete(agendamentoId);
     }
+  }
+
+  async listExecucoesAdmin(
+    query: ListAdminScheduleExecutionsQueryDto,
+  ): Promise<AdminScheduleExecutionListResult> {
+    const page = query.page;
+    const pageSize = query.page_size;
+    const sortDesc = query.sort === 'iniciado_em:desc';
+
+    const qb = this.execucaoRepository
+      .createQueryBuilder('execucao')
+      .innerJoinAndSelect('execucao.vinculo', 'vinculo')
+      .leftJoinAndSelect('vinculo.agendamento', 'agendamento');
+
+    if (query.status) {
+      qb.andWhere('execucao.status = :status', { status: query.status });
+    }
+
+    if (query.relatorio_id) {
+      qb.andWhere('vinculo.entidade_tipo = :entidadeTipo', {
+        entidadeTipo: 'relatorio',
+      }).andWhere('vinculo.entidade_id = :relatorioId', {
+        relatorioId: query.relatorio_id,
+      });
+    }
+
+    if (query.created_from) {
+      qb.andWhere('execucao.iniciado_em >= :createdFrom', {
+        createdFrom: query.created_from,
+      });
+    }
+
+    if (query.created_to) {
+      qb.andWhere('execucao.iniciado_em <= :createdTo', {
+        createdTo: query.created_to,
+      });
+    }
+
+    qb.orderBy('execucao.iniciado_em', sortDesc ? 'DESC' : 'ASC');
+    qb.skip((page - 1) * pageSize).take(pageSize);
+
+    const [rows, total] = await qb.getManyAndCount();
+
+    const relatorioIds = [
+      ...new Set(
+        rows
+          .filter((row) => row.vinculo.entidadeTipo === 'relatorio')
+          .map((row) => Number(row.vinculo.entidadeId)),
+      ),
+    ];
+
+    const relatorios =
+      relatorioIds.length > 0
+        ? await this.relatorioRepository.find({
+            where: { id: In(relatorioIds) },
+          })
+        : [];
+    const relatoriosById = new Map(
+      relatorios.map((relatorio) => [Number(relatorio.id), relatorio]),
+    );
+
+    const items: AdminScheduleExecutionItem[] = rows.map((execucao) => {
+      const relatorioId =
+        execucao.vinculo.entidadeTipo === 'relatorio'
+          ? Number(execucao.vinculo.entidadeId)
+          : null;
+      const relatorio =
+        relatorioId != null ? relatoriosById.get(relatorioId) : undefined;
+
+      return {
+        id: Number(execucao.id),
+        vinculoId: Number(execucao.vinculoId),
+        status: execucao.status,
+        jobId: execucao.jobId,
+        erro: execucao.erro,
+        iniciadoEm: execucao.iniciadoEm,
+        concluidoEm: execucao.concluidoEm,
+        relatorioId,
+        relatorioNome: relatorio?.nome ?? null,
+        agendamentoNome:
+          execucao.vinculo.agendamento?.nome ?? `Agendamento #${execucao.vinculo.agendamentoId}`,
+      };
+    });
+
+    return { items, page, pageSize, total };
   }
 
   private async findVinculoByEntity(

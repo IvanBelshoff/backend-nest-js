@@ -4,6 +4,7 @@ import { QueueModule } from 'src/queue/queue.module';
 import { Agendamento } from './entities/Agendamento';
 import { AgendamentoExecucao } from './entities/AgendamentoExecucao';
 import { AgendamentoVinculo } from './entities/AgendamentoVinculo';
+import { Relatorio } from 'src/database/entities/Relatorios';
 import { ScheduleCronBuilder } from './schedule-cron.builder';
 import { ScheduleHandlerRegistry } from './schedule-handler.registry';
 import { ScheduleSyncService } from './schedule-sync.service';
@@ -17,6 +18,7 @@ import { ScheduleDispatcherWorker } from './workers/schedule-dispatcher.worker';
       Agendamento,
       AgendamentoVinculo,
       AgendamentoExecucao,
+      Relatorio,
     ]),
     QueueModule,
   ],

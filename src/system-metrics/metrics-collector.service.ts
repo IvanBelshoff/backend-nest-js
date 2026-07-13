@@ -26,6 +26,8 @@ import {
 
   REPORT_SNAPSHOT_QUEUE,
 
+  SCHEDULER_DISPATCH_QUEUE,
+
 } from 'src/queue/queue.constants';
 
 import { env } from 'src/shared/env.schema';
@@ -339,6 +341,8 @@ export class MetricsCollectorService {
         REPORT_SNAPSHOT_QUEUE,
 
         REPORT_EXPORT_QUEUE,
+
+        SCHEDULER_DISPATCH_QUEUE,
 
       ]);
 

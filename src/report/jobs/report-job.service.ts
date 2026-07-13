@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import type { JobWithMetadata } from 'pg-boss';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { PgBossService } from 'src/queue/pg-boss.service';
 import {
   REPORT_EXPORT_QUEUE,
@@ -18,6 +18,8 @@ import {
   RelatorioJobStatus,
   RelatorioJobTipo,
 } from 'src/database/entities/RelatorioJobs';
+import { Usuario } from 'src/database/entities/Usuarios';
+import type { ListAdminJobsQueryDto } from 'src/admin-jobs/dto/list-admin-jobs-query.dto';
 import { ReportService } from '../report.service';
 
 export interface JobStatusResponse {
@@ -32,11 +34,35 @@ export interface JobStatusResponse {
   completedAt: Date | null;
 }
 
+export type AdminJobListItem = JobStatusResponse & {
+  relatorioNome: string;
+  userId: number;
+  userNome: string;
+  origem: 'manual' | 'agendado';
+  parametros: Record<string, unknown>;
+};
+
+export type SnapshotHistoryItem = JobStatusResponse & {
+  userId: number;
+  userNome: string;
+  origem: 'manual' | 'agendado';
+  parametros: Record<string, unknown>;
+};
+
+export interface AdminJobListResult {
+  items: AdminJobListItem[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
 @Injectable()
 export class ReportJobService {
   constructor(
     @InjectRepository(RelatorioJob)
     private readonly jobRepository: Repository<RelatorioJob>,
+    @InjectRepository(Usuario)
+    private readonly usuarioRepository: Repository<Usuario>,
     private readonly pgBossService: PgBossService,
     @Inject(forwardRef(() => ReportService))
     private readonly reportService: ReportService,
@@ -128,6 +154,155 @@ export class ReportJobService {
     }
 
     return job;
+  }
+
+  async listJobsForAdmin(
+    query: ListAdminJobsQueryDto,
+  ): Promise<AdminJobListResult> {
+    const page = query.page;
+    const pageSize = query.page_size;
+    const sortDesc = query.sort === 'created_at:desc';
+
+    const qb = this.jobRepository
+      .createQueryBuilder('job')
+      .leftJoinAndSelect('job.relatorio', 'relatorio');
+
+    if (query.status) {
+      qb.andWhere('job.status = :status', { status: query.status });
+    }
+
+    if (query.tipo) {
+      qb.andWhere('job.tipo = :tipo', { tipo: query.tipo });
+    }
+
+    if (query.relatorio_id) {
+      qb.andWhere('job.relatorio_id = :relatorioId', {
+        relatorioId: query.relatorio_id,
+      });
+    }
+
+    if (query.user_id) {
+      qb.andWhere('job.user_id = :userId', { userId: query.user_id });
+    }
+
+    if (query.job_id) {
+      qb.andWhere('job.id = :jobId', { jobId: query.job_id });
+    }
+
+    if (query.created_from) {
+      qb.andWhere('job.created_at >= :createdFrom', {
+        createdFrom: query.created_from,
+      });
+    }
+
+    if (query.created_to) {
+      qb.andWhere('job.created_at <= :createdTo', {
+        createdTo: query.created_to,
+      });
+    }
+
+    qb.orderBy('job.created_at', sortDesc ? 'DESC' : 'ASC');
+    qb.skip((page - 1) * pageSize).take(pageSize);
+
+    const [rows, total] = await qb.getManyAndCount();
+
+    const jobIds = rows.map((row) => row.id);
+    const userIds = [...new Set(rows.map((row) => row.userId))];
+    const scheduledJobIds = await this.loadScheduledJobIds(jobIds);
+
+    const users =
+      userIds.length > 0
+        ? await this.usuarioRepository.find({
+            where: { id: In(userIds) },
+          })
+        : [];
+    const usersById = new Map(users.map((user) => [Number(user.id), user]));
+
+    const items: AdminJobListItem[] = rows.map((job) => {
+      const usuario = usersById.get(job.userId);
+      const userNome = usuario
+        ? `${usuario.nome} ${usuario.sobrenome}`.trim()
+        : `Usuário #${job.userId}`;
+
+      return {
+        ...this.toStatusResponse(job),
+        relatorioNome: job.relatorio?.nome ?? `Relatório #${job.relatorioId}`,
+        userId: job.userId,
+        userNome,
+        origem: scheduledJobIds.has(job.id) ? 'agendado' : 'manual',
+        parametros: job.parametros ?? {},
+      };
+    });
+
+    return { items, page, pageSize, total };
+  }
+
+  async listSnapshotHistoryForReport(
+    relatorioId: number,
+    limit = 50,
+  ): Promise<SnapshotHistoryItem[]> {
+    const rows = await this.jobRepository.find({
+      where: {
+        relatorioId,
+        tipo: RelatorioJobTipo.SNAPSHOT,
+      },
+      order: { createdAt: 'DESC' },
+      take: limit,
+    });
+
+    if (rows.length === 0) {
+      return [];
+    }
+
+    const jobIds = rows.map((row) => row.id);
+    const userIds = [...new Set(rows.map((row) => row.userId))];
+    const scheduledJobIds = await this.loadScheduledJobIds(jobIds);
+
+    const users =
+      userIds.length > 0
+        ? await this.usuarioRepository.find({
+            where: { id: In(userIds) },
+          })
+        : [];
+    const usersById = new Map(users.map((user) => [Number(user.id), user]));
+
+    return rows.map((job) => {
+      const usuario = usersById.get(job.userId);
+      const userNome = usuario
+        ? `${usuario.nome} ${usuario.sobrenome}`.trim()
+        : `Usuário #${job.userId}`;
+
+      return {
+        ...this.toStatusResponse(job),
+        userId: job.userId,
+        userNome,
+        origem: scheduledJobIds.has(job.id) ? 'agendado' : 'manual',
+        parametros: job.parametros ?? {},
+      };
+    });
+  }
+
+  private async loadScheduledJobIds(jobIds: string[]): Promise<Set<string>> {
+    const scheduledJobIds = new Set<string>();
+
+    if (jobIds.length === 0) {
+      return scheduledJobIds;
+    }
+
+    const scheduled = await this.jobRepository.manager.query<
+      { job_id: string }[]
+    >(
+      `SELECT DISTINCT job_id FROM agendamento_execucoes WHERE job_id = ANY($1::uuid[])`,
+      [jobIds],
+    );
+
+    for (const row of scheduled) {
+      if (row.job_id) {
+        scheduledJobIds.add(row.job_id);
+      }
+    }
+
+    return scheduledJobIds;
   }
 
   private async syncWithPgBoss(job: RelatorioJob): Promise<RelatorioJob> {

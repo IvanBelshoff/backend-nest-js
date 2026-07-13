@@ -132,6 +132,10 @@ async function executeMssql(
     options: {
       encrypt: conexao.opcoes?.encrypt !== false,
       trustServerCertificate: conexao.opcoes?.trustServerCertificate === true,
+      cancelTimeout: Math.min(
+        60_000,
+        Math.max(10_000, Math.ceil(timeoutMs * 0.1)),
+      ),
     },
     connectionTimeout: timeoutMs,
     requestTimeout: timeoutMs,

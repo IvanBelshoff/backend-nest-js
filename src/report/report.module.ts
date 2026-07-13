@@ -48,6 +48,6 @@ import { SnapshotCleanupService } from './storage/snapshot-cleanup.service';
       useFactory: createStorageProvider,
     },
   ],
-  exports: [ReportService],
+  exports: [ReportService, ReportJobService],
 })
 export class ReportModule {}
