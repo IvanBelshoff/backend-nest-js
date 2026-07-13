@@ -1,7 +1,7 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-export class Default1783946309920 implements MigrationInterface {
-    name = 'Default1783946309920'
+export class Default1783971682439 implements MigrationInterface {
+    name = 'Default1783971682439'
 
     public async up(queryRunner: QueryRunner): Promise<void> {
         await queryRunner.query(`CREATE TABLE "fotos" ("id" SERIAL NOT NULL, "nome" text NOT NULL, "originalname" text NOT NULL, "tipo" text NOT NULL, "tamanho" integer NOT NULL, "local" text NOT NULL, "url" text NOT NULL, "data_criacao" date NOT NULL DEFAULT now(), "data_atualizacao" date NOT NULL DEFAULT ('now'::text)::timestamp(6) with time zone, CONSTRAINT "PK_929dc0abc9924e9f2797dbca023" PRIMARY KEY ("id"))`);
@@ -30,6 +30,10 @@ export class Default1783946309920 implements MigrationInterface {
         await queryRunner.query(`CREATE INDEX "IDX_agendamento_vinculos_agendamento_id" ON "agendamento_vinculos"  ("agendamento_id") `);
         await queryRunner.query(`CREATE TYPE "public"."agendamentos_frequencia_enum" AS ENUM('minuto', 'hora', 'dia', 'semana', 'mes')`);
         await queryRunner.query(`CREATE TABLE "agendamentos" ("id" BIGSERIAL NOT NULL, "nome" text NOT NULL, "ativo" boolean NOT NULL DEFAULT true, "intervalo" integer NOT NULL DEFAULT '1', "frequencia" "public"."agendamentos_frequencia_enum" NOT NULL, "timezone" text NOT NULL DEFAULT 'America/Sao_Paulo', "hora_inicio" TIMESTAMP WITH TIME ZONE, "dias_semana" smallint array NOT NULL DEFAULT '{}', "horas" smallint array NOT NULL DEFAULT '{}', "minutos" smallint array NOT NULL DEFAULT '{0}', "cron_expression" text NOT NULL, "proxima_execucao" TIMESTAMP WITH TIME ZONE, "ultima_execucao" TIMESTAMP WITH TIME ZONE, "usuario_cadastrador" text, "usuario_atualizador" text, "data_criacao" TIMESTAMP NOT NULL DEFAULT now(), "data_atualizacao" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "PK_3890b7448ebc7efdfd1d43bf0c7" PRIMARY KEY ("id"))`);
+        await queryRunner.query(`CREATE TYPE "public"."user_notifications_type_enum" AS ENUM('export_ready', 'export_failed', 'snapshot_ready', 'snapshot_failed')`);
+        await queryRunner.query(`CREATE TABLE "user_notifications" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "user_id" bigint NOT NULL, "type" "public"."user_notifications_type_enum" NOT NULL, "title" text NOT NULL, "body" text NOT NULL, "payload" jsonb NOT NULL DEFAULT '{}', "read_at" TIMESTAMP, "created_at" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "PK_569622b0fd6e6ab3661de985a2b" PRIMARY KEY ("id"))`);
+        await queryRunner.query(`CREATE INDEX "IDX_user_notifications_user_id_read_at" ON "user_notifications"  ("user_id", "read_at") `);
+        await queryRunner.query(`CREATE INDEX "IDX_user_notifications_user_id_created_at" ON "user_notifications"  ("user_id", "created_at") `);
         await queryRunner.query(`CREATE TABLE "usuarios_permissoes" ("usuario_id" bigint NOT NULL, "permissao_id" bigint NOT NULL, CONSTRAINT "PK_c2275cafd5b7251e1901e02768d" PRIMARY KEY ("usuario_id", "permissao_id"))`);
         await queryRunner.query(`CREATE INDEX "IDX_a590446adec482807e08a9f17f" ON "usuarios_permissoes"  ("usuario_id") `);
         await queryRunner.query(`CREATE INDEX "IDX_bc6db171d9b3fa0891abc5c204" ON "usuarios_permissoes"  ("permissao_id") `);
@@ -49,6 +53,7 @@ export class Default1783946309920 implements MigrationInterface {
         await queryRunner.query(`ALTER TABLE "relatorio_jobs" ADD CONSTRAINT "FK_3310cb7c81c439c02d62497487b" FOREIGN KEY ("relatorio_id") REFERENCES "relatorios"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
         await queryRunner.query(`ALTER TABLE "agendamento_execucoes" ADD CONSTRAINT "FK_649644f005e02b767eb11e113fb" FOREIGN KEY ("vinculo_id") REFERENCES "agendamento_vinculos"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
         await queryRunner.query(`ALTER TABLE "agendamento_vinculos" ADD CONSTRAINT "FK_40b58d88fddd7d6bb290ad73e53" FOREIGN KEY ("agendamento_id") REFERENCES "agendamentos"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "user_notifications" ADD CONSTRAINT "FK_ae9b1d1f1fe780ef8e3e7d0c0f6" FOREIGN KEY ("user_id") REFERENCES "usuarios"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
         await queryRunner.query(`ALTER TABLE "usuarios_permissoes" ADD CONSTRAINT "FK_a590446adec482807e08a9f17fc" FOREIGN KEY ("usuario_id") REFERENCES "usuarios"("id") ON DELETE CASCADE ON UPDATE SET NULL`);
         await queryRunner.query(`ALTER TABLE "usuarios_permissoes" ADD CONSTRAINT "FK_bc6db171d9b3fa0891abc5c204c" FOREIGN KEY ("permissao_id") REFERENCES "permissoes"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`);
         await queryRunner.query(`ALTER TABLE "usuarios_regras" ADD CONSTRAINT "FK_0066c27e153d919f92134d975a5" FOREIGN KEY ("usuario_id") REFERENCES "usuarios"("id") ON DELETE CASCADE ON UPDATE SET NULL`);
@@ -68,6 +73,7 @@ export class Default1783946309920 implements MigrationInterface {
         await queryRunner.query(`ALTER TABLE "usuarios_regras" DROP CONSTRAINT "FK_0066c27e153d919f92134d975a5"`);
         await queryRunner.query(`ALTER TABLE "usuarios_permissoes" DROP CONSTRAINT "FK_bc6db171d9b3fa0891abc5c204c"`);
         await queryRunner.query(`ALTER TABLE "usuarios_permissoes" DROP CONSTRAINT "FK_a590446adec482807e08a9f17fc"`);
+        await queryRunner.query(`ALTER TABLE "user_notifications" DROP CONSTRAINT "FK_ae9b1d1f1fe780ef8e3e7d0c0f6"`);
         await queryRunner.query(`ALTER TABLE "agendamento_vinculos" DROP CONSTRAINT "FK_40b58d88fddd7d6bb290ad73e53"`);
         await queryRunner.query(`ALTER TABLE "agendamento_execucoes" DROP CONSTRAINT "FK_649644f005e02b767eb11e113fb"`);
         await queryRunner.query(`ALTER TABLE "relatorio_jobs" DROP CONSTRAINT "FK_3310cb7c81c439c02d62497487b"`);
@@ -87,6 +93,10 @@ export class Default1783946309920 implements MigrationInterface {
         await queryRunner.query(`DROP INDEX "public"."IDX_bc6db171d9b3fa0891abc5c204"`);
         await queryRunner.query(`DROP INDEX "public"."IDX_a590446adec482807e08a9f17f"`);
         await queryRunner.query(`DROP TABLE "usuarios_permissoes"`);
+        await queryRunner.query(`DROP INDEX "public"."IDX_user_notifications_user_id_created_at"`);
+        await queryRunner.query(`DROP INDEX "public"."IDX_user_notifications_user_id_read_at"`);
+        await queryRunner.query(`DROP TABLE "user_notifications"`);
+        await queryRunner.query(`DROP TYPE "public"."user_notifications_type_enum"`);
         await queryRunner.query(`DROP TABLE "agendamentos"`);
         await queryRunner.query(`DROP TYPE "public"."agendamentos_frequencia_enum"`);
         await queryRunner.query(`DROP INDEX "public"."IDX_agendamento_vinculos_agendamento_id"`);

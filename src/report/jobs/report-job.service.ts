@@ -68,6 +68,10 @@ export class ReportJobService {
     private readonly reportService: ReportService,
   ) {}
 
+  async findJobEntity(jobId: string): Promise<RelatorioJob | null> {
+    return this.jobRepository.findOne({ where: { id: jobId } });
+  }
+
   async createJob(input: {
     id: string;
     relatorioId: number;

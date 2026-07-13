@@ -31,6 +31,13 @@ export const AUTH_ENDPOINT_MATRIX = {
     'PATCH /user/:id': { permission: ['PERMISSAO_ATUALIZAR_USUARIO'] },
     'DELETE /user/photo/:id': { self: true },
     'DELETE /user/:id': { permission: ['PERMISSAO_EXCLUIR_USUARIO'] },
+    'GET /user/me/notifications': { self: true },
+    'GET /user/me/notifications/unread-count': { self: true },
+    'PATCH /user/me/notifications/:id/read': { self: true },
+    'PATCH /user/me/notifications/read-all': { self: true },
+    'GET /user/me/summary': { self: true },
+    'PATCH /user/me/photo': { self: true },
+    'PATCH /user/me/password': { self: true },
   },
   dashboards: {
     'POST /dashboards': {

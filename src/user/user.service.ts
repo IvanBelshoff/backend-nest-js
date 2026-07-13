@@ -4,6 +4,7 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  UnauthorizedException,
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -371,6 +372,39 @@ export class UsersService {
     );
 
     await this.userRepository.update(id, { senha: hashedPassword });
+  }
+
+  async changeOwnPassword(
+    userId: number,
+    senhaAtual: string,
+    novaSenha: string,
+  ): Promise<void> {
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      select: { id: true, senha: true, bloqueado: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Usuário não localizado');
+    }
+
+    this.assertUserNotBlocked(user);
+
+    const isCurrentPasswordValid = user.senha
+      ? await bcrypt.compare(senhaAtual, user.senha)
+      : false;
+
+    if (!isCurrentPasswordValid) {
+      throw new UnauthorizedException('Senha atual incorreta.');
+    }
+
+    const hashedPassword = await bcrypt.hash(
+      novaSenha,
+      await bcrypt.genSalt(env.SALT_ROUNDS),
+    );
+
+    await this.userRepository.update(userId, { senha: hashedPassword });
+    await this.refreshTokenService.revokeAllForUser(userId);
   }
 
   async updateRolesAndPermissions(
@@ -1027,6 +1061,42 @@ export class UsersService {
 
   private resolvePhotoPath(local: string): string {
     return isAbsolute(local) ? local : join(__dirname, '..', local);
+  }
+
+  async assertUserActive(userId: number): Promise<void> {
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      select: { id: true, bloqueado: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Usuário não localizado');
+    }
+
+    this.assertUserNotBlocked(user as Usuario);
+  }
+
+  async updatePhotoForUser(
+    userId: number,
+    requester: { sub: number; email: string },
+    foto?: Express.Multer.File,
+  ): Promise<Usuario> {
+    if (!foto) {
+      throw new BadRequestException('Arquivo de foto é obrigatório');
+    }
+
+    if (Number(requester.sub) !== Number(userId)) {
+      throw new ForbiddenException('Acesso negado');
+    }
+
+    const updated = await this.update(
+      userId,
+      {},
+      requester,
+      foto,
+    );
+
+    return updated as Usuario;
   }
 
   public buildPhotoData(

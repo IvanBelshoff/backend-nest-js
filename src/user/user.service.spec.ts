@@ -466,6 +466,69 @@ describe('UsersService', () => {
     });
   });
 
+  describe('changeOwnPassword', () => {
+    it('updates password when current password is correct', async () => {
+      const { service, userRepository, refreshTokenService } = buildServiceMocks();
+      const currentPasswordHash = await bcrypt.hash('senha-atual', 10);
+
+      userRepository.findOne.mockResolvedValue({
+        id: 2,
+        senha: currentPasswordHash,
+        bloqueado: false,
+      });
+
+      await service.changeOwnPassword(2, 'senha-atual', 'nova-senha-segura');
+
+      expect(userRepository.update).toHaveBeenCalledWith(
+        2,
+        expect.objectContaining({
+          senha: expect.not.stringMatching(currentPasswordHash),
+        }),
+      );
+
+      const updatedPassword = userRepository.update.mock.calls[0][1].senha;
+      await expect(bcrypt.compare('nova-senha-segura', updatedPassword)).resolves.toBe(
+        true,
+      );
+      expect(refreshTokenService.revokeAllForUser).toHaveBeenCalledWith(2);
+    });
+
+    it('rejects when current password is incorrect', async () => {
+      const { service, userRepository, refreshTokenService } = buildServiceMocks();
+      const currentPasswordHash = await bcrypt.hash('senha-atual', 10);
+
+      userRepository.findOne.mockResolvedValue({
+        id: 2,
+        senha: currentPasswordHash,
+        bloqueado: false,
+      });
+
+      await expect(
+        service.changeOwnPassword(2, 'senha-errada', 'nova-senha-segura'),
+      ).rejects.toThrow('Senha atual incorreta.');
+
+      expect(userRepository.update).not.toHaveBeenCalled();
+      expect(refreshTokenService.revokeAllForUser).not.toHaveBeenCalled();
+    });
+
+    it('rejects when the user is blocked', async () => {
+      const { service, userRepository, refreshTokenService } = buildServiceMocks();
+
+      userRepository.findOne.mockResolvedValue({
+        id: 2,
+        senha: await bcrypt.hash('senha-atual', 10),
+        bloqueado: true,
+      });
+
+      await expect(
+        service.changeOwnPassword(2, 'senha-atual', 'nova-senha-segura'),
+      ).rejects.toThrow(BLOCKED_USER_OPERATION_MESSAGE);
+
+      expect(userRepository.update).not.toHaveBeenCalled();
+      expect(refreshTokenService.revokeAllForUser).not.toHaveBeenCalled();
+    });
+  });
+
   describe('deletePhoto', () => {
     it('rejects photo deletion when the user is blocked', async () => {
       const { service, userRepository } = buildServiceMocks();

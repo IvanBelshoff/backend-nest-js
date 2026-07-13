@@ -3,7 +3,8 @@ import { createReadStream } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { forwardRef, Inject, Injectable } from '@nestjs/common';
-import { EstadoRelatorio } from 'src/database/entities/Relatorios';
+import { EstadoRelatorio, Relatorio } from 'src/database/entities/Relatorios';
+import { UserNotificationService } from 'src/user-notifications/user-notification.service';
 import { env } from 'src/shared/env.schema';
 import { PgBossService } from 'src/queue/pg-boss.service';
 import { REPORT_EXPORT_QUEUE } from 'src/queue/queue.constants';
@@ -31,6 +32,7 @@ export class ReportExportService {
     @Inject(forwardRef(() => ReportSnapshotService))
     private readonly reportSnapshotService: ReportSnapshotService,
     private readonly duckDbService: DuckDbService,
+    private readonly userNotificationService: UserNotificationService,
   ) {}
 
   async scheduleExport(
@@ -66,8 +68,10 @@ export class ReportExportService {
   async generateCsvExport(jobId: string, payload: ExportJobPayload): Promise<void> {
     await this.reportJobService.markProcessing(jobId, 10);
 
+    let relatorio: Awaited<ReturnType<ReportService['findById']>> | null = null;
+
     try {
-      const relatorio = await this.reportService.findById(
+      relatorio = await this.reportService.findById(
         payload.relatorioId,
         payload.userId,
       );
@@ -98,6 +102,7 @@ export class ReportExportService {
 
         await this.reportJobService.updateProgress(jobId, 90);
         await this.reportJobService.markCompleted(jobId, filePath);
+        await this.notifyJobCompletion(jobId, relatorio);
         return;
       }
 
@@ -113,12 +118,33 @@ export class ReportExportService {
       await this.reportJobService.updateProgress(jobId, 90);
       await writeFile(filePath, csvContent, 'utf8');
       await this.reportJobService.markCompleted(jobId, filePath);
+      await this.notifyJobCompletion(jobId, relatorio);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Erro ao exportar relatório';
       await this.reportJobService.markFailed(jobId, message);
+      await this.notifyJobCompletion(jobId, relatorio);
       throw error;
     }
+  }
+
+  private async notifyJobCompletion(
+    jobId: string,
+    relatorio: Pick<Relatorio, 'id' | 'nome'> | null,
+  ): Promise<void> {
+    const job = await this.reportJobService.findJobEntity(jobId);
+
+    if (!job) {
+      return;
+    }
+
+    await this.userNotificationService.createFromJob(
+      job,
+      relatorio ?? {
+        id: Number(job.relatorioId),
+        nome: `Relatório #${job.relatorioId}`,
+      },
+    );
   }
 
   /** Adiciona BOM UTF-8 ao CSV gerado pelo DuckDB via streaming (sem carregar tudo em RAM). */

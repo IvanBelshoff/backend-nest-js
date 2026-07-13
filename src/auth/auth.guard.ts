@@ -5,12 +5,14 @@ import {
   CanActivate,
   ExecutionContext,
   Injectable,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { Request } from 'express';
 import { IS_PUBLIC_KEY } from 'src/shared/decorators/auth-public.decorator';
+import { LIGHTWEIGHT_AUTH_KEY } from 'src/shared/decorators/lightweight-auth.decorator';
 import { UsersService } from 'src/user/user.service';
 import type { UserRequest } from 'src/shared/interfaces/UserRequest';
 
@@ -28,6 +30,11 @@ export class AuthGuard implements CanActivate {
       context.getClass(),
     ]);
 
+    const isLightweight = this.reflector.getAllAndOverride<boolean>(
+      LIGHTWEIGHT_AUTH_KEY,
+      [context.getHandler(), context.getClass()],
+    );
+
     if (isPublic) {
       return true;
     }
@@ -42,6 +49,11 @@ export class AuthGuard implements CanActivate {
     try {
       const payload = await this.jwtService.verifyAsync(token);
       request.user = payload;
+
+      if (isLightweight) {
+        await this.usersService.assertUserActive(Number(payload.sub));
+        return true;
+      }
 
       if (payload.email && !request.authUser) {
         request.authUser = await this.usersService.findOne(payload.email);

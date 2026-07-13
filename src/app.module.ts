@@ -13,6 +13,7 @@ import { ConnectionModule } from './connection/connection.module';
 import { ReportModule } from './report/report.module';
 import { SchedulerModule } from './scheduler/scheduler.module';
 import { AdminJobsModule } from './admin-jobs/admin-jobs.module';
+import { UserNotificationsModule } from './user-notifications/user-notifications.module';
 import { QueueModule } from './queue/queue.module';
 import { IconModule } from './icon/icon.module';
 import { SystemMetricsModule } from './system-metrics/system-metrics.module';
@@ -55,6 +56,7 @@ const isThrottlingEnabled = env.NODE_ENV !== 'development';
     QueueModule,
     SchedulerModule,
     AdminJobsModule,
+    UserNotificationsModule,
     ReportModule,
     IconModule,
     SystemMetricsModule,

@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Conexao } from 'src/database/entities/Conexoes';
 import { Relatorio } from 'src/database/entities/Relatorios';
@@ -6,6 +6,7 @@ import { Usuario } from 'src/database/entities/Usuarios';
 import { ConnectionModule } from 'src/connection/connection.module';
 import { QueueModule } from 'src/queue/queue.module';
 import { SchedulerModule } from 'src/scheduler/scheduler.module';
+import { UserNotificationsModule } from 'src/user-notifications/user-notifications.module';
 import { ReportSnapshotRefreshHandler } from 'src/scheduler/handlers/report-snapshot-refresh.handler';
 import { ReportController } from './report.controller';
 import { ReportService } from './report.service';
@@ -29,6 +30,7 @@ import { SnapshotCleanupService } from './storage/snapshot-cleanup.service';
     ConnectionModule,
     QueueModule,
     SchedulerModule,
+    forwardRef(() => UserNotificationsModule),
   ],
   controllers: [ReportController, ReportJobController],
   providers: [

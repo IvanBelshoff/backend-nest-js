@@ -10,6 +10,7 @@ import { RelatorioJob } from './entities/RelatorioJobs';
 import { Agendamento } from '../scheduler/entities/Agendamento';
 import { AgendamentoVinculo } from '../scheduler/entities/AgendamentoVinculo';
 import { AgendamentoExecucao } from '../scheduler/entities/AgendamentoExecucao';
+import { UserNotification } from './entities/UserNotification';
 import { Usuario } from './entities/Usuarios';
 
 export const entities = [
@@ -25,6 +26,7 @@ export const entities = [
   AgendamentoVinculo,
   AgendamentoExecucao,
   RefreshToken,
+  UserNotification,
 ];
 
 export function getTypeOrmConfig() {

@@ -7,6 +7,7 @@ import { REPORT_SNAPSHOT_QUEUE } from 'src/queue/queue.constants';
 import type { SnapshotJobPayload } from 'src/queue/types/snapshot-job.payload';
 import { ReportJobService } from '../jobs/report-job.service';
 import { ReportSnapshotService } from '../report-snapshot.service';
+import { UserNotificationService } from 'src/user-notifications/user-notification.service';
 
 @Injectable()
 export class ReportSnapshotWorker implements OnApplicationBootstrap {
@@ -18,6 +19,7 @@ export class ReportSnapshotWorker implements OnApplicationBootstrap {
     private readonly reportJobService: ReportJobService,
     @InjectRepository(Relatorio)
     private readonly relatorioRepository: Repository<Relatorio>,
+    private readonly userNotificationService: UserNotificationService,
   ) {}
 
   onApplicationBootstrap(): void {
@@ -54,6 +56,7 @@ export class ReportSnapshotWorker implements OnApplicationBootstrap {
 
     if (!relatorio) {
       await this.reportJobService.markFailed(jobId, 'Relatório não encontrado');
+      await this.notifyJobCompletion(jobId, null);
       return;
     }
 
@@ -62,12 +65,33 @@ export class ReportSnapshotWorker implements OnApplicationBootstrap {
       relatorio.snapshot_valido
     ) {
       await this.reportJobService.markCompleted(jobId);
+      await this.notifyJobCompletion(jobId, relatorio);
       return;
     }
 
     await this.reportJobService.markFailed(
       jobId,
       relatorio.erro_ultima_geracao ?? 'Falha ao gerar snapshot',
+    );
+    await this.notifyJobCompletion(jobId, relatorio);
+  }
+
+  private async notifyJobCompletion(
+    jobId: string,
+    relatorio: Pick<Relatorio, 'id' | 'nome'> | null,
+  ): Promise<void> {
+    const job = await this.reportJobService.findJobEntity(jobId);
+
+    if (!job) {
+      return;
+    }
+
+    await this.userNotificationService.createFromJob(
+      job,
+      relatorio ?? {
+        id: Number(job.relatorioId),
+        nome: `Relatório #${job.relatorioId}`,
+      },
     );
   }
 }
