@@ -2,11 +2,10 @@ import { Injectable, OnApplicationBootstrap } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Dashboard } from 'src/database/entities/Dashboards';
 import { Usuario } from 'src/database/entities/Usuarios';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { env } from '../env.schema';
 import { logger } from './Logger';
 import {
-  DASHBOARD_SEED_MARKER_NAME,
   dashboardSeedData,
 } from '../seeds/dashboard-seed.data';
 
@@ -38,11 +37,12 @@ export class SeedDashboardsService implements OnApplicationBootstrap {
   private async seedDashboards() {
     logger.info('Seeding dashboards...');
 
-    const existing = await this.dashboardRepository.findOneBy({
-      nome: DASHBOARD_SEED_MARKER_NAME,
+    const seedNames = dashboardSeedData.map((seed) => seed.nome);
+    const existingCount = await this.dashboardRepository.count({
+      where: { nome: In(seedNames) },
     });
 
-    if (existing) {
+    if (existingCount === seedNames.length) {
       logger.info('Dashboard seed data already exists');
       return;
     }
@@ -57,11 +57,20 @@ export class SeedDashboardsService implements OnApplicationBootstrap {
     }
 
     const ownerName = `${admin.nome} ${admin.sobrenome}`;
+    let created = 0;
+    let skipped = 0;
 
     await this.dashboardRepository.manager.transaction(async (manager) => {
       const dashboardRepository = manager.getRepository(Dashboard);
 
       for (const seed of dashboardSeedData) {
+        const alreadyExists = await dashboardRepository.existsBy({ nome: seed.nome });
+
+        if (alreadyExists) {
+          skipped += 1;
+          continue;
+        }
+
         const dashboard = dashboardRepository.create({
           nome: seed.nome,
           url: seed.url,
@@ -83,10 +92,18 @@ export class SeedDashboardsService implements OnApplicationBootstrap {
         });
 
         await dashboardRepository.save(dashboard);
+        created += 1;
       }
     });
 
-    logger.info(`Seeded ${dashboardSeedData.length} dashboards successfully`);
+    if (created === 0) {
+      logger.info('Dashboard seed data already exists');
+      return;
+    }
+
+    logger.info(
+      `Seeded ${created} dashboards successfully${skipped > 0 ? ` (${skipped} skipped, already present)` : ''}`,
+    );
   }
 
   async onApplicationBootstrap() {

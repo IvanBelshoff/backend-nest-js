@@ -1,5 +1,12 @@
 import { z } from 'zod';
 
+function parseCorsOrigins(value: string): string[] {
+  return value
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0);
+}
+
 export const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']),
   PORT: z.coerce.number().int().positive().default(3000),
@@ -11,7 +18,7 @@ export const envSchema = z.object({
   DB_POOL_MAX: z.coerce.number().int().positive().default(20),
   JWT_SECRET: z.string().min(1),
   REFRESH_TOKEN_PEPPER: z.string().min(32),
-  CORS_ORIGIN: z.string().min(1),
+  CORS_ORIGIN: z.string().min(1).transform(parseCorsOrigins),
   COOKIE_SECURE: z
     .string()
     .optional()

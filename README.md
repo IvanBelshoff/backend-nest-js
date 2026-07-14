@@ -31,7 +31,7 @@ Todas as variáveis obrigatórias estão documentadas em [`.env.example`](.env.e
 | `DB_*` | Conexão PostgreSQL |
 | `JWT_SECRET` | Secret do access token |
 | `REFRESH_TOKEN_PEPPER` | Pepper do refresh token (mín. 32 chars) |
-| `CORS_ORIGIN` | Origin do frontend (credentials) |
+| `CORS_ORIGIN` | Origens do frontend, separadas por vírgula (credentials) |
 | `REGRAS_PERMISSOES` | JSON de roles → permissões |
 | `SYNC_ROLES_ON_STARTUP` | Sincronizar RBAC no bootstrap |
 | `SWAGGER_ENABLED` | Força `/docs` mesmo em production |
