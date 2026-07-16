@@ -17,6 +17,7 @@ import { UserNotificationsModule } from './user-notifications/user-notifications
 import { QueueModule } from './queue/queue.module';
 import { IconModule } from './icon/icon.module';
 import { SystemMetricsModule } from './system-metrics/system-metrics.module';
+import { AiModule } from './ai/ai.module';
 import { SyncRolesAndPermissions } from './shared/services/SyncRolesAndPermissions';
 import { DefaultUserService } from './shared/services/SeedDefaultUser';
 import { SeedDashboardsService } from './shared/services/SeedDashboards';
@@ -60,6 +61,7 @@ const isThrottlingEnabled = env.NODE_ENV !== 'development';
     ReportModule,
     IconModule,
     SystemMetricsModule,
+    AiModule,
     TypeOrmModule.forFeature([Permissao, Regra, Usuario, Dashboard, Conexao, Relatorio]),
   ],
   providers: [

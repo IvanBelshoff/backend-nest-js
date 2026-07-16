@@ -28,6 +28,7 @@ async function bootstrap() {
     credentials: true,
     exposedHeaders: ['x-total-count'],
   });
+
   setupSwagger(app);
   await app.listen(env.PORT).then(() => {
     console.log(`Server is running on port ${env.PORT}`);
