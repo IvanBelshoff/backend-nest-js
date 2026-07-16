@@ -1,7 +1,7 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-export class Default1784155327553 implements MigrationInterface {
-    name = 'Default1784155327553'
+export class Default1784219128918 implements MigrationInterface {
+    name = 'Default1784219128918'
 
     public async up(queryRunner: QueryRunner): Promise<void> {
         await queryRunner.query(`CREATE TABLE "fotos" ("id" SERIAL NOT NULL, "nome" text NOT NULL, "originalname" text NOT NULL, "tipo" text NOT NULL, "tamanho" integer NOT NULL, "local" text NOT NULL, "url" text NOT NULL, "data_criacao" date NOT NULL DEFAULT now(), "data_atualizacao" date NOT NULL DEFAULT ('now'::text)::timestamp(6) with time zone, CONSTRAINT "PK_929dc0abc9924e9f2797dbca023" PRIMARY KEY ("id"))`);
@@ -10,6 +10,7 @@ export class Default1784155327553 implements MigrationInterface {
         await queryRunner.query(`CREATE TYPE "public"."dashboards_privacidade_enum" AS ENUM('privado', 'publico')`);
         await queryRunner.query(`CREATE TABLE "dashboards" ("id" BIGSERIAL NOT NULL, "nome" text NOT NULL, "icone" text NOT NULL DEFAULT 'insert_chart', "query" text, "url" text NOT NULL, "temporario" boolean NOT NULL DEFAULT false, "data_expiracao_inicial" date, "data_expiracao_final" date, "id_proprietario" integer, "privacidade" "public"."dashboards_privacidade_enum" NOT NULL DEFAULT 'privado', "visivel" boolean NOT NULL DEFAULT false, "usuario_cadastrador" text, "usuario_atualizador" text, "data_criacao" TIMESTAMP NOT NULL DEFAULT now(), "data_atualizacao" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "UQ_1c0154f2248e6b17d798ff1082d" UNIQUE ("nome"), CONSTRAINT "UQ_07b750540fc80b52e9bc1583b76" UNIQUE ("url"), CONSTRAINT "PK_1b4b4bc346118e0d335f16c5344" PRIMARY KEY ("id"))`);
         await queryRunner.query(`CREATE TABLE "usuarios" ("id" BIGSERIAL NOT NULL, "nome" text NOT NULL, "sobrenome" text NOT NULL, "email" text NOT NULL, "bloqueado" boolean NOT NULL DEFAULT false, "senha" character varying NOT NULL, "usuario_atualizador" text, "usuario_cadastrador" text, "ultimo_login" TIMESTAMP, "data_criacao" TIMESTAMP NOT NULL DEFAULT now(), "data_atualizacao" TIMESTAMP NOT NULL DEFAULT now(), "dashboards_favoritos" text, "relatorios_favoritos" text, "preferencias_ui" jsonb, "foto_id" integer, CONSTRAINT "UQ_446adfc18b35418aac32ae0b7b5" UNIQUE ("email"), CONSTRAINT "REL_55052d24aed9dc9717268122d3" UNIQUE ("foto_id"), CONSTRAINT "PK_d7281c63c176e152e4c531594a8" PRIMARY KEY ("id"))`);
+        await queryRunner.query(`CREATE TABLE "usuarios_relatorios" ("usuario_id" bigint NOT NULL, "relatorio_id" bigint NOT NULL, "permitir_conhecimento_ia" boolean NOT NULL DEFAULT false, CONSTRAINT "PK_ab5cc94a3c8d7ff9142c619fc11" PRIMARY KEY ("usuario_id", "relatorio_id"))`);
         await queryRunner.query(`CREATE TYPE "public"."relatorios_privacidade_enum" AS ENUM('privado', 'publico')`);
         await queryRunner.query(`CREATE TYPE "public"."relatorios_estado_enum" AS ENUM('online', 'offline', 'gerando_snapshot')`);
         await queryRunner.query(`CREATE TABLE "relatorios" ("id" BIGSERIAL NOT NULL, "nome" text NOT NULL, "icone" text NOT NULL DEFAULT 'table_chart', "query" text NOT NULL, "temporario" boolean NOT NULL DEFAULT false, "data_expiracao_inicial" date, "data_expiracao_final" date, "id_proprietario" integer, "privacidade" "public"."relatorios_privacidade_enum" NOT NULL DEFAULT 'privado', "visivel" boolean NOT NULL DEFAULT false, "estado" "public"."relatorios_estado_enum" NOT NULL DEFAULT 'online', "parametros" jsonb, "id_conexao" bigint NOT NULL, "snapshot_atualizado_em" TIMESTAMP, "snapshot_valido" boolean NOT NULL DEFAULT true, "erro_ultima_geracao" text, "limite_linhas" integer NOT NULL, "timeout_ms" integer NOT NULL, "usuario_cadastrador" text, "usuario_atualizador" text, "data_criacao" TIMESTAMP NOT NULL DEFAULT now(), "data_atualizacao" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "UQ_c3bc0ecc46912df02b4510e3f10" UNIQUE ("nome"), CONSTRAINT "PK_45c4346cde9bc12a1ece0c95b1d" PRIMARY KEY ("id"))`);
@@ -34,6 +35,10 @@ export class Default1784155327553 implements MigrationInterface {
         await queryRunner.query(`CREATE TABLE "user_notifications" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "user_id" bigint NOT NULL, "type" "public"."user_notifications_type_enum" NOT NULL, "title" text NOT NULL, "body" text NOT NULL, "payload" jsonb NOT NULL DEFAULT '{}', "read_at" TIMESTAMP, "created_at" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "PK_569622b0fd6e6ab3661de985a2b" PRIMARY KEY ("id"))`);
         await queryRunner.query(`CREATE INDEX "IDX_user_notifications_user_id_read_at" ON "user_notifications"  ("user_id", "read_at") `);
         await queryRunner.query(`CREATE INDEX "IDX_user_notifications_user_id_created_at" ON "user_notifications"  ("user_id", "created_at") `);
+        await queryRunner.query(`CREATE TABLE "ai_chat_messages" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "thread_id" uuid NOT NULL, "role" text NOT NULL, "parts" jsonb NOT NULL DEFAULT '[]', "metadata" jsonb NOT NULL DEFAULT '{}', "created_at" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "PK_68e330d1b2a3c5368bf6d2f67cb" PRIMARY KEY ("id"))`);
+        await queryRunner.query(`CREATE INDEX "IDX_ai_chat_messages_thread_id_created_at" ON "ai_chat_messages"  ("thread_id", "created_at") `);
+        await queryRunner.query(`CREATE TABLE "ai_chat_threads" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "user_id" bigint NOT NULL, "titulo" text, "created_at" TIMESTAMP NOT NULL DEFAULT now(), "updated_at" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "PK_f3c42fae4e67af47f67ec7ebb70" PRIMARY KEY ("id"))`);
+        await queryRunner.query(`CREATE INDEX "IDX_ai_chat_threads_user_id_updated_at" ON "ai_chat_threads"  ("user_id", "updated_at") `);
         await queryRunner.query(`CREATE TABLE "usuarios_permissoes" ("usuario_id" bigint NOT NULL, "permissao_id" bigint NOT NULL, CONSTRAINT "PK_c2275cafd5b7251e1901e02768d" PRIMARY KEY ("usuario_id", "permissao_id"))`);
         await queryRunner.query(`CREATE INDEX "IDX_a590446adec482807e08a9f17f" ON "usuarios_permissoes"  ("usuario_id") `);
         await queryRunner.query(`CREATE INDEX "IDX_bc6db171d9b3fa0891abc5c204" ON "usuarios_permissoes"  ("permissao_id") `);
@@ -43,47 +48,45 @@ export class Default1784155327553 implements MigrationInterface {
         await queryRunner.query(`CREATE TABLE "usuarios_dashboards" ("usuario_id" bigint NOT NULL, "dashboard_id" bigint NOT NULL, CONSTRAINT "PK_ff2df7628e5b74df5967eecc0d8" PRIMARY KEY ("usuario_id", "dashboard_id"))`);
         await queryRunner.query(`CREATE INDEX "IDX_ae13afe7d369c7dc054584a0eb" ON "usuarios_dashboards"  ("usuario_id") `);
         await queryRunner.query(`CREATE INDEX "IDX_d2e252a75692e11c4d17f899f3" ON "usuarios_dashboards"  ("dashboard_id") `);
-        await queryRunner.query(`CREATE TABLE "usuarios_relatorios" ("usuario_id" bigint NOT NULL, "relatorio_id" bigint NOT NULL, CONSTRAINT "PK_ab5cc94a3c8d7ff9142c619fc11" PRIMARY KEY ("usuario_id", "relatorio_id"))`);
-        await queryRunner.query(`CREATE INDEX "IDX_4b696434df9655afd7f6ab4b7a" ON "usuarios_relatorios"  ("usuario_id") `);
-        await queryRunner.query(`CREATE INDEX "IDX_819804a93af84bc29f3efb51e4" ON "usuarios_relatorios"  ("relatorio_id") `);
         await queryRunner.query(`ALTER TABLE "permissoes" ADD CONSTRAINT "FK_f560190caec0444d6751c2ba940" FOREIGN KEY ("regra_id") REFERENCES "regras"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
         await queryRunner.query(`ALTER TABLE "usuarios" ADD CONSTRAINT "FK_55052d24aed9dc9717268122d3e" FOREIGN KEY ("foto_id") REFERENCES "fotos"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "usuarios_relatorios" ADD CONSTRAINT "FK_4b696434df9655afd7f6ab4b7a1" FOREIGN KEY ("usuario_id") REFERENCES "usuarios"("id") ON DELETE CASCADE ON UPDATE SET NULL`);
+        await queryRunner.query(`ALTER TABLE "usuarios_relatorios" ADD CONSTRAINT "FK_819804a93af84bc29f3efb51e4b" FOREIGN KEY ("relatorio_id") REFERENCES "relatorios"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`);
         await queryRunner.query(`ALTER TABLE "relatorios" ADD CONSTRAINT "FK_dc6efb1fd80b493398d66be521c" FOREIGN KEY ("id_conexao") REFERENCES "conexoes"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`);
         await queryRunner.query(`ALTER TABLE "refresh_tokens" ADD CONSTRAINT "FK_c8349fdadc1bc791125bdd8c855" FOREIGN KEY ("usuario_id") REFERENCES "usuarios"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
         await queryRunner.query(`ALTER TABLE "relatorio_jobs" ADD CONSTRAINT "FK_3310cb7c81c439c02d62497487b" FOREIGN KEY ("relatorio_id") REFERENCES "relatorios"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
         await queryRunner.query(`ALTER TABLE "agendamento_execucoes" ADD CONSTRAINT "FK_649644f005e02b767eb11e113fb" FOREIGN KEY ("vinculo_id") REFERENCES "agendamento_vinculos"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
         await queryRunner.query(`ALTER TABLE "agendamento_vinculos" ADD CONSTRAINT "FK_40b58d88fddd7d6bb290ad73e53" FOREIGN KEY ("agendamento_id") REFERENCES "agendamentos"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
         await queryRunner.query(`ALTER TABLE "user_notifications" ADD CONSTRAINT "FK_ae9b1d1f1fe780ef8e3e7d0c0f6" FOREIGN KEY ("user_id") REFERENCES "usuarios"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "ai_chat_messages" ADD CONSTRAINT "FK_b17c2cf0bd69da72bb8d6d4178c" FOREIGN KEY ("thread_id") REFERENCES "ai_chat_threads"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "ai_chat_threads" ADD CONSTRAINT "FK_777fa35d985652dca66e24a5ba4" FOREIGN KEY ("user_id") REFERENCES "usuarios"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
         await queryRunner.query(`ALTER TABLE "usuarios_permissoes" ADD CONSTRAINT "FK_a590446adec482807e08a9f17fc" FOREIGN KEY ("usuario_id") REFERENCES "usuarios"("id") ON DELETE CASCADE ON UPDATE SET NULL`);
         await queryRunner.query(`ALTER TABLE "usuarios_permissoes" ADD CONSTRAINT "FK_bc6db171d9b3fa0891abc5c204c" FOREIGN KEY ("permissao_id") REFERENCES "permissoes"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`);
         await queryRunner.query(`ALTER TABLE "usuarios_regras" ADD CONSTRAINT "FK_0066c27e153d919f92134d975a5" FOREIGN KEY ("usuario_id") REFERENCES "usuarios"("id") ON DELETE CASCADE ON UPDATE SET NULL`);
         await queryRunner.query(`ALTER TABLE "usuarios_regras" ADD CONSTRAINT "FK_de8c8a4c69cba9ae0a401ec432f" FOREIGN KEY ("regra_id") REFERENCES "regras"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`);
         await queryRunner.query(`ALTER TABLE "usuarios_dashboards" ADD CONSTRAINT "FK_ae13afe7d369c7dc054584a0eb0" FOREIGN KEY ("usuario_id") REFERENCES "usuarios"("id") ON DELETE CASCADE ON UPDATE SET NULL`);
         await queryRunner.query(`ALTER TABLE "usuarios_dashboards" ADD CONSTRAINT "FK_d2e252a75692e11c4d17f899f39" FOREIGN KEY ("dashboard_id") REFERENCES "dashboards"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`);
-        await queryRunner.query(`ALTER TABLE "usuarios_relatorios" ADD CONSTRAINT "FK_4b696434df9655afd7f6ab4b7a1" FOREIGN KEY ("usuario_id") REFERENCES "usuarios"("id") ON DELETE CASCADE ON UPDATE SET NULL`);
-        await queryRunner.query(`ALTER TABLE "usuarios_relatorios" ADD CONSTRAINT "FK_819804a93af84bc29f3efb51e4b" FOREIGN KEY ("relatorio_id") REFERENCES "relatorios"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`);
     }
 
     public async down(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`ALTER TABLE "usuarios_relatorios" DROP CONSTRAINT "FK_819804a93af84bc29f3efb51e4b"`);
-        await queryRunner.query(`ALTER TABLE "usuarios_relatorios" DROP CONSTRAINT "FK_4b696434df9655afd7f6ab4b7a1"`);
         await queryRunner.query(`ALTER TABLE "usuarios_dashboards" DROP CONSTRAINT "FK_d2e252a75692e11c4d17f899f39"`);
         await queryRunner.query(`ALTER TABLE "usuarios_dashboards" DROP CONSTRAINT "FK_ae13afe7d369c7dc054584a0eb0"`);
         await queryRunner.query(`ALTER TABLE "usuarios_regras" DROP CONSTRAINT "FK_de8c8a4c69cba9ae0a401ec432f"`);
         await queryRunner.query(`ALTER TABLE "usuarios_regras" DROP CONSTRAINT "FK_0066c27e153d919f92134d975a5"`);
         await queryRunner.query(`ALTER TABLE "usuarios_permissoes" DROP CONSTRAINT "FK_bc6db171d9b3fa0891abc5c204c"`);
         await queryRunner.query(`ALTER TABLE "usuarios_permissoes" DROP CONSTRAINT "FK_a590446adec482807e08a9f17fc"`);
+        await queryRunner.query(`ALTER TABLE "ai_chat_threads" DROP CONSTRAINT "FK_777fa35d985652dca66e24a5ba4"`);
+        await queryRunner.query(`ALTER TABLE "ai_chat_messages" DROP CONSTRAINT "FK_b17c2cf0bd69da72bb8d6d4178c"`);
         await queryRunner.query(`ALTER TABLE "user_notifications" DROP CONSTRAINT "FK_ae9b1d1f1fe780ef8e3e7d0c0f6"`);
         await queryRunner.query(`ALTER TABLE "agendamento_vinculos" DROP CONSTRAINT "FK_40b58d88fddd7d6bb290ad73e53"`);
         await queryRunner.query(`ALTER TABLE "agendamento_execucoes" DROP CONSTRAINT "FK_649644f005e02b767eb11e113fb"`);
         await queryRunner.query(`ALTER TABLE "relatorio_jobs" DROP CONSTRAINT "FK_3310cb7c81c439c02d62497487b"`);
         await queryRunner.query(`ALTER TABLE "refresh_tokens" DROP CONSTRAINT "FK_c8349fdadc1bc791125bdd8c855"`);
         await queryRunner.query(`ALTER TABLE "relatorios" DROP CONSTRAINT "FK_dc6efb1fd80b493398d66be521c"`);
+        await queryRunner.query(`ALTER TABLE "usuarios_relatorios" DROP CONSTRAINT "FK_819804a93af84bc29f3efb51e4b"`);
+        await queryRunner.query(`ALTER TABLE "usuarios_relatorios" DROP CONSTRAINT "FK_4b696434df9655afd7f6ab4b7a1"`);
         await queryRunner.query(`ALTER TABLE "usuarios" DROP CONSTRAINT "FK_55052d24aed9dc9717268122d3e"`);
         await queryRunner.query(`ALTER TABLE "permissoes" DROP CONSTRAINT "FK_f560190caec0444d6751c2ba940"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_819804a93af84bc29f3efb51e4"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_4b696434df9655afd7f6ab4b7a"`);
-        await queryRunner.query(`DROP TABLE "usuarios_relatorios"`);
         await queryRunner.query(`DROP INDEX "public"."IDX_d2e252a75692e11c4d17f899f3"`);
         await queryRunner.query(`DROP INDEX "public"."IDX_ae13afe7d369c7dc054584a0eb"`);
         await queryRunner.query(`DROP TABLE "usuarios_dashboards"`);
@@ -93,6 +96,10 @@ export class Default1784155327553 implements MigrationInterface {
         await queryRunner.query(`DROP INDEX "public"."IDX_bc6db171d9b3fa0891abc5c204"`);
         await queryRunner.query(`DROP INDEX "public"."IDX_a590446adec482807e08a9f17f"`);
         await queryRunner.query(`DROP TABLE "usuarios_permissoes"`);
+        await queryRunner.query(`DROP INDEX "public"."IDX_ai_chat_threads_user_id_updated_at"`);
+        await queryRunner.query(`DROP TABLE "ai_chat_threads"`);
+        await queryRunner.query(`DROP INDEX "public"."IDX_ai_chat_messages_thread_id_created_at"`);
+        await queryRunner.query(`DROP TABLE "ai_chat_messages"`);
         await queryRunner.query(`DROP INDEX "public"."IDX_user_notifications_user_id_created_at"`);
         await queryRunner.query(`DROP INDEX "public"."IDX_user_notifications_user_id_read_at"`);
         await queryRunner.query(`DROP TABLE "user_notifications"`);
@@ -117,6 +124,7 @@ export class Default1784155327553 implements MigrationInterface {
         await queryRunner.query(`DROP TABLE "relatorios"`);
         await queryRunner.query(`DROP TYPE "public"."relatorios_estado_enum"`);
         await queryRunner.query(`DROP TYPE "public"."relatorios_privacidade_enum"`);
+        await queryRunner.query(`DROP TABLE "usuarios_relatorios"`);
         await queryRunner.query(`DROP TABLE "usuarios"`);
         await queryRunner.query(`DROP TABLE "dashboards"`);
         await queryRunner.query(`DROP TYPE "public"."dashboards_privacidade_enum"`);

@@ -16,6 +16,13 @@ import { Regra } from 'src/database/entities/Regras';
 import { Permissao } from 'src/database/entities/Permissoes';
 import { Dashboard, Privacidade } from 'src/database/entities/Dashboards';
 import { Relatorio } from 'src/database/entities/Relatorios';
+import { UsuarioRelatorio } from 'src/database/entities/UsuarioRelatorio';
+import {
+  buildUsuarioRelatorioGrants,
+  getUsuarioRelatorios,
+  relatorioHasUserGrant,
+} from 'src/shared/utils/usuario-relatorio.util';
+import type { RelatorioGrantInput } from 'src/shared/utils/usuario-relatorio.util';
 import { existsSync, statSync, unlinkSync } from 'fs';
 import { isAbsolute, join } from 'path';
 import { env } from '../shared/env.schema';
@@ -49,8 +56,8 @@ export interface UsuariosByDashboard {
 }
 
 export interface UsuariosByRelatorio {
-  usuarios: Usuario[];
-  usuariosDisponiveis: Omit<Usuario, 'relatorio'>[];
+  usuarios: Array<Usuario & { permitirConhecimentoIa?: boolean }>;
+  usuariosDisponiveis: Usuario[];
 }
 
 export const BLOCKED_USER_OPERATION_MESSAGE =
@@ -147,6 +154,7 @@ export class UsersService {
       `(
         LOWER(usuario.nome) LIKE LOWER(:textFilter)
         OR LOWER(usuario.sobrenome) LIKE LOWER(:textFilter)
+        OR LOWER(TRIM(CONCAT(usuario.nome, ' ', usuario.sobrenome))) LIKE LOWER(:textFilter)
         OR LOWER(usuario.email) LIKE LOWER(:textFilter)
         OR EXISTS (
           SELECT 1
@@ -240,6 +248,27 @@ export class UsersService {
         foto: true,
         regra: true,
         permissao: { regra: true },
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Usuário não localizado');
+    }
+
+    const { senha: _senha, ...rest } = user;
+    return rest;
+  }
+
+  async findByIdWithAccessRelations(
+    id: number,
+  ): Promise<Omit<Usuario, 'senha'>> {
+    const user = await this.userRepository.findOne({
+      where: { id },
+      relations: {
+        regra: true,
+        permissao: { regra: true },
+        dashboard: true,
+        usuarioRelatorios: { relatorio: true },
       },
     });
 
@@ -754,7 +783,7 @@ export class UsersService {
 
     const source = await this.userRepository.findOne({
       where: { id: idCopiado },
-      relations: { relatorio: true },
+      relations: { usuarioRelatorios: true },
     });
 
     if (!source) {
@@ -763,8 +792,23 @@ export class UsersService {
 
     this.assertUserNotBlockedAsSource(source);
 
-    target.relatorio = source.relatorio ?? [];
-    await this.userRepository.save(target);
+    await this.userRepository.manager.transaction(async (manager) => {
+      const usuarioRelatorioRepository =
+        manager.getRepository(UsuarioRelatorio);
+
+      await usuarioRelatorioRepository.delete({ usuarioId: idUsuario });
+
+      if (source.usuarioRelatorios?.length) {
+        const copied = source.usuarioRelatorios.map((grant) =>
+          usuarioRelatorioRepository.create({
+            usuarioId: idUsuario,
+            relatorioId: grant.relatorioId,
+            permitirConhecimentoIa: grant.permitirConhecimentoIa,
+          }),
+        );
+        await usuarioRelatorioRepository.save(copied);
+      }
+    });
   }
 
   async updateRelatorioFavorites(
@@ -773,7 +817,7 @@ export class UsersService {
   ): Promise<void> {
     const user = await this.userRepository.findOne({
       where: { id },
-      relations: { relatorio: true },
+      relations: { usuarioRelatorios: true },
     });
 
     if (!user) {
@@ -787,7 +831,7 @@ export class UsersService {
     for (const favoriteId of favoritos) {
       const relatorio = await this.relatorioRepository.findOne({
         where: { id: favoriteId },
-        relations: { usuario: true },
+        relations: { usuarioRelatorios: true },
       });
 
       if (!relatorio) {
@@ -796,7 +840,7 @@ export class UsersService {
 
       if (relatorio.privacidade === Privacidade.PRIVAT) {
         const hasAccess =
-          relatorio.usuario?.some((usuario) => usuario.id === user.id) ||
+          relatorioHasUserGrant(relatorio, Number(user.id)) ||
           relatorio.id_proprietario === Number(user.id);
 
         if (!hasAccess) {
@@ -813,14 +857,19 @@ export class UsersService {
     await this.userRepository.save(user);
   }
 
-  async assignRelatorios(id: number, relatorios: number[]): Promise<void> {
+  async assignRelatorios(
+    id: number,
+    relatorios: RelatorioGrantInput[],
+  ): Promise<void> {
     await this.userRepository.manager.transaction(async (manager) => {
       const userRepository = manager.getRepository(Usuario);
       const relatorioRepository = manager.getRepository(Relatorio);
+      const usuarioRelatorioRepository =
+        manager.getRepository(UsuarioRelatorio);
 
       const user = await userRepository.findOne({
         where: { id },
-        relations: { relatorio: true },
+        relations: { usuarioRelatorios: true },
       });
 
       if (!user) {
@@ -829,11 +878,12 @@ export class UsersService {
 
       this.assertUserNotBlocked(user);
 
-      const relatorioEntities = relatorios.length
-        ? await relatorioRepository.find({ where: { id: In(relatorios) } })
+      const relatorioIds = relatorios.map((item) => item.id);
+      const relatorioEntities = relatorioIds.length
+        ? await relatorioRepository.find({ where: { id: In(relatorioIds) } })
         : [];
 
-      if (relatorioEntities.length !== relatorios.length) {
+      if (relatorioEntities.length !== relatorioIds.length) {
         throw new BadRequestException('Algum relatório não foi encontrado.');
       }
 
@@ -855,7 +905,7 @@ export class UsersService {
       });
 
       const missingOwned = owned.filter(
-        (relatorio) => !relatorios.includes(Number(relatorio.id)),
+        (relatorio) => !relatorioIds.includes(Number(relatorio.id)),
       );
 
       if (missingOwned.length > 0) {
@@ -864,48 +914,67 @@ export class UsersService {
         );
       }
 
-      user.relatorio = relatorioEntities;
-
-      if (user.relatorios_favoritos?.length) {
-        const assignedIds = relatorioEntities.map((relatorio) => relatorio.id);
-        user.relatorios_favoritos = user.relatorios_favoritos.filter(
-          (favoriteId) => assignedIds.includes(favoriteId),
+      await usuarioRelatorioRepository.delete({ usuarioId: id });
+      if (relatorios.length > 0) {
+        const grants = buildUsuarioRelatorioGrants(
+          id,
+          relatorios,
+          user.usuarioRelatorios ?? [],
         );
+        await usuarioRelatorioRepository.save(grants);
       }
 
-      await userRepository.save(user);
+      if (user.relatorios_favoritos?.length) {
+        user.relatorios_favoritos = user.relatorios_favoritos.filter(
+          (favoriteId) => relatorioIds.includes(favoriteId),
+        );
+        await userRepository.save(user);
+      }
     });
   }
 
   async getUsersByRelatorio(relatorioId: number): Promise<UsuariosByRelatorio> {
     const relatorio = await this.relatorioRepository.findOne({
       where: { id: relatorioId },
+      relations: { usuarioRelatorios: { usuario: { foto: true } } },
     });
 
     if (!relatorio) {
       throw new NotFoundException('Relatório não localizado');
     }
 
-    const usuarios = await this.userRepository.find({
+    const usuarios = (relatorio.usuarioRelatorios ?? [])
+      .map((grant) => {
+        if (!grant.usuario || grant.usuario.bloqueado) {
+          return null;
+        }
+
+        return {
+          ...grant.usuario,
+          permitirConhecimentoIa: grant.permitirConhecimentoIa,
+        };
+      })
+      .filter(
+        (
+          usuario,
+        ): usuario is Usuario & { permitirConhecimentoIa: boolean } =>
+          usuario != null,
+      )
+      .sort((left, right) => left.nome.localeCompare(right.nome));
+
+    const grantedIds = new Set(usuarios.map((usuario) => Number(usuario.id)));
+
+    const todosUsuarios = await this.userRepository.find({
       relations: { foto: true },
-      where: { relatorio: { id: relatorioId } },
       order: { nome: 'ASC' },
     });
 
-    const todosUsuarios = await this.userRepository.find({
-      relations: { relatorio: true, foto: true },
-    });
-
-    const disponiveis = todosUsuarios
-      .filter(
-        (usuario) =>
-          !usuarios.some((associado) => associado.id === usuario.id) &&
-          !usuario.bloqueado,
-      )
-      .map(({ relatorio: _relatorio, ...rest }) => rest);
+    const disponiveis = todosUsuarios.filter(
+      (usuario) => !grantedIds.has(Number(usuario.id)) && !usuario.bloqueado,
+    );
 
     return {
-      usuarios: usuarios.filter((usuario) => !usuario.bloqueado),
+      usuarios,
       usuariosDisponiveis:
         relatorio.privacidade === Privacidade.PUBLIC ? [] : disponiveis,
     };

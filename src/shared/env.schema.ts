@@ -107,6 +107,8 @@ export const envSchema = z.object({
     .url()
     .default('http://192.168.100.13:11434'),
   OLLAMA_MODEL: z.string().min(1).default('qwen3.5:4b'),
+  AI_MAX_REPORT_ROWS: z.coerce.number().int().positive().default(100),
+  AI_MAX_STEPS: z.coerce.number().int().positive().default(5),
 });
 
 export type Env = z.infer<typeof envSchema>;

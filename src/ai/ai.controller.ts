@@ -1,37 +1,145 @@
-import { Body, Controller, Post, Res } from '@nestjs/common';
 import {
-  convertToModelMessages,
-  pipeUIMessageStreamToResponse,
-  streamText,
-  toUIMessageStream,
-  type UIMessage,
-} from 'ai';
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  Post,
+  Request,
+  Res,
+  UnauthorizedException,
+  UseGuards,
+} from '@nestjs/common';
 import type { Response } from 'express';
-import { Public } from 'src/shared/decorators/auth-public.decorator';
-import { AiService } from './ai.service';
-
-type ChatBody = {
-  messages: UIMessage[];
-};
+import type { UIMessage } from 'ai';
+import { ZodValidation } from 'src/shared/decorators/zod-validation.decorator';
+import type { UserRequest } from 'src/shared/interfaces/UserRequest';
+import { AiAccessGuard } from './ai-access.guard';
+import { AiAccessService } from './ai-access.service';
+import { AiChatService } from './ai-chat.service';
+import { AiChatPersistenceService } from './ai-chat-persistence.service';
+import {
+  aiChatSchema,
+  createAiThreadSchema,
+  type AiChatDto,
+  type CreateAiThreadDto,
+} from './dto/ai-chat.dto';
 
 @Controller('ai')
 export class AiController {
-  constructor(private readonly aiService: AiService) {}
+  constructor(
+    private readonly aiAccessService: AiAccessService,
+    private readonly aiChatService: AiChatService,
+    private readonly aiChatPersistenceService: AiChatPersistenceService,
+  ) {}
 
-  @Public()
+  @Get('access')
+  async getAccess(@Request() req: UserRequest) {
+    if (!req.user) {
+      throw new UnauthorizedException();
+    }
+
+    return this.aiAccessService.getAccessStatus(Number(req.user.sub));
+  }
+
+  @Get('threads')
+  @UseGuards(AiAccessGuard)
+  async listThreads(@Request() req: UserRequest) {
+    if (!req.user) {
+      throw new UnauthorizedException();
+    }
+
+    const threads = await this.aiChatPersistenceService.listThreads(
+      Number(req.user.sub),
+    );
+
+    return threads.map((thread) => ({
+      id: thread.id,
+      titulo: thread.titulo,
+      createdAt: thread.createdAt,
+      updatedAt: thread.updatedAt,
+    }));
+  }
+
+  @Post('threads')
+  @UseGuards(AiAccessGuard)
+  @ZodValidation(createAiThreadSchema)
+  async createThread(
+    @Body() dto: CreateAiThreadDto,
+    @Request() req: UserRequest,
+  ) {
+    if (!req.user) {
+      throw new UnauthorizedException();
+    }
+
+    const thread = await this.aiChatPersistenceService.createThread(
+      Number(req.user.sub),
+      dto.titulo,
+    );
+
+    return {
+      id: thread.id,
+      titulo: thread.titulo,
+      createdAt: thread.createdAt,
+      updatedAt: thread.updatedAt,
+    };
+  }
+
+  @Get('threads/:id/messages')
+  @UseGuards(AiAccessGuard)
+  async getThreadMessages(
+    @Param('id') threadId: string,
+    @Request() req: UserRequest,
+  ) {
+    if (!req.user) {
+      throw new UnauthorizedException();
+    }
+
+    const messages = await this.aiChatPersistenceService.getThreadMessages(
+      Number(req.user.sub),
+      threadId,
+    );
+
+    return {
+      messages: this.aiChatPersistenceService.toUiMessages(messages),
+    };
+  }
+
+  @Delete('threads/:id')
+  @UseGuards(AiAccessGuard)
+  @HttpCode(204)
+  async deleteThread(
+    @Param('id') threadId: string,
+    @Request() req: UserRequest,
+  ) {
+    if (!req.user) {
+      throw new UnauthorizedException();
+    }
+
+    await this.aiChatPersistenceService.deleteThread(
+      Number(req.user.sub),
+      threadId,
+    );
+  }
+
   @Post('chat')
-  async chat(@Body() body: ChatBody, @Res() res: Response) {
-    const messages = Array.isArray(body?.messages) ? body.messages : [];
+  @UseGuards(AiAccessGuard)
+  @ZodValidation(aiChatSchema)
+  async chat(
+    @Body() body: AiChatDto,
+    @Request() req: UserRequest,
+    @Res() res: Response,
+  ) {
+    if (!req.user || !req.authUser) {
+      throw new UnauthorizedException();
+    }
 
-    const result = streamText({
-      model: this.aiService.getChatModel(),
-      system: 'Responda de forma clara e objetiva em português.',
-      messages: await convertToModelMessages(messages),
-    });
-
-    pipeUIMessageStreamToResponse({
-      response: res,
-      stream: toUIMessageStream({ stream: result.stream }),
+    await this.aiChatService.streamChat({
+      user: req.authUser,
+      messages: body.messages as unknown as UIMessage[],
+      threadId: body.threadId,
+      res,
     });
   }
 }

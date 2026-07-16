@@ -36,5 +36,9 @@ import { SystemMetricsController } from './system-metrics.controller';
       useClass: HttpMetricsInterceptor,
     },
   ],
+  exports: [
+    MetricsCollectorService,
+    MetricsPersistenceService,
+  ],
 })
 export class SystemMetricsModule {}

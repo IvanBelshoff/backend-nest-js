@@ -12,6 +12,9 @@ import { AgendamentoVinculo } from '../scheduler/entities/AgendamentoVinculo';
 import { AgendamentoExecucao } from '../scheduler/entities/AgendamentoExecucao';
 import { UserNotification } from './entities/UserNotification';
 import { Usuario } from './entities/Usuarios';
+import { UsuarioRelatorio } from './entities/UsuarioRelatorio';
+import { AiChatThread } from './entities/AiChatThread';
+import { AiChatMessage } from './entities/AiChatMessage';
 
 export const entities = [
   Usuario,
@@ -27,6 +30,9 @@ export const entities = [
   AgendamentoExecucao,
   RefreshToken,
   UserNotification,
+  UsuarioRelatorio,
+  AiChatThread,
+  AiChatMessage,
 ];
 
 export function getTypeOrmConfig() {

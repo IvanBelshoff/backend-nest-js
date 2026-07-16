@@ -3,14 +3,15 @@ import {
   CreateDateColumn,
   Entity,
   JoinColumn,
-  ManyToMany,
   ManyToOne,
+  OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
 import { Usuario } from './Usuarios';
 import { Conexao } from './Conexoes';
 import { Privacidade } from './privacidade.enum';
+import { UsuarioRelatorio } from './UsuarioRelatorio';
 
 export enum EstadoRelatorio {
   ONLINE = 'online',
@@ -112,6 +113,6 @@ export class Relatorio {
   @UpdateDateColumn({ nullable: false, type: 'timestamp' })
   data_atualizacao: Date;
 
-  @ManyToMany(() => Usuario, (usuario) => usuario.relatorio)
-  usuario: Usuario[];
+  @OneToMany(() => UsuarioRelatorio, (usuarioRelatorio) => usuarioRelatorio.relatorio)
+  usuarioRelatorios: UsuarioRelatorio[];
 }

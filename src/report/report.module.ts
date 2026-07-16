@@ -2,6 +2,7 @@ import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Conexao } from 'src/database/entities/Conexoes';
 import { Relatorio } from 'src/database/entities/Relatorios';
+import { UsuarioRelatorio } from 'src/database/entities/UsuarioRelatorio';
 import { Usuario } from 'src/database/entities/Usuarios';
 import { ConnectionModule } from 'src/connection/connection.module';
 import { QueueModule } from 'src/queue/queue.module';
@@ -26,7 +27,7 @@ import { SnapshotCleanupService } from './storage/snapshot-cleanup.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Relatorio, Usuario, Conexao, RelatorioJob]),
+    TypeOrmModule.forFeature([Relatorio, Usuario, UsuarioRelatorio, Conexao, RelatorioJob]),
     ConnectionModule,
     QueueModule,
     SchedulerModule,
@@ -50,6 +51,6 @@ import { SnapshotCleanupService } from './storage/snapshot-cleanup.service';
       useFactory: createStorageProvider,
     },
   ],
-  exports: [ReportService, ReportJobService],
+  exports: [ReportService, ReportJobService, ReportExecutionService, SnapshotQueryService],
 })
 export class ReportModule {}

@@ -26,7 +26,7 @@ async function bootstrap() {
   app.enableCors({
     origin: env.CORS_ORIGIN,
     credentials: true,
-    exposedHeaders: ['x-total-count'],
+    exposedHeaders: ['x-total-count', 'X-Thread-Id', 'X-Thread-Title'],
   });
 
   setupSwagger(app);

@@ -124,4 +124,12 @@ export const AUTH_ENDPOINT_MATRIX = {
     'GET /admin/jobs': { role: ['REGRA_ADMIN'] },
     'GET /admin/jobs/schedules': { role: ['REGRA_ADMIN'] },
   },
+  ai: {
+    'GET /ai/access': { permission: ['PERMISSAO_USAR_IA'] },
+    'GET /ai/threads': { permission: ['PERMISSAO_USAR_IA'] },
+    'POST /ai/threads': { permission: ['PERMISSAO_USAR_IA'] },
+    'GET /ai/threads/:id/messages': { permission: ['PERMISSAO_USAR_IA'] },
+    'DELETE /ai/threads/:id': { permission: ['PERMISSAO_USAR_IA'] },
+    'POST /ai/chat': { permission: ['PERMISSAO_USAR_IA'] },
+  },
 } as const;

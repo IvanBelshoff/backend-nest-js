@@ -17,7 +17,14 @@ import {
   Relatorio,
 } from 'src/database/entities/Relatorios';
 import { Usuario } from 'src/database/entities/Usuarios';
+import { UsuarioRelatorio } from 'src/database/entities/UsuarioRelatorio';
 import { env } from 'src/shared/env.schema';
+import {
+  buildRelatorioUsuarioGrants,
+  getRelatorioAssignedUsers,
+  relatorioHasUserGrant,
+  userHasRelatorioGrant,
+} from 'src/shared/utils/usuario-relatorio.util';
 import { CreateReportDto, UpdateReportDto } from './dto/create-report.dto';
 import { ReportSnapshotService } from './report-snapshot.service';
 import { SchedulerService } from 'src/scheduler/scheduler.service';
@@ -56,6 +63,8 @@ export class ReportService {
     private readonly relatorioRepository: Repository<Relatorio>,
     @InjectRepository(Usuario)
     private readonly userRepository: Repository<Usuario>,
+    @InjectRepository(UsuarioRelatorio)
+    private readonly usuarioRelatorioRepository: Repository<UsuarioRelatorio>,
     @InjectRepository(Conexao)
     private readonly conexaoRepository: Repository<Conexao>,
     @Inject(forwardRef(() => ReportSnapshotService))
@@ -107,10 +116,19 @@ export class ReportService {
       id_proprietario: requester.sub,
       usuario_cadastrador: fullName,
       usuario_atualizador: fullName,
-      usuario: owner ? [owner] : [],
     });
 
-    return this.relatorioRepository.save(relatorio);
+    const saved = await this.relatorioRepository.save(relatorio);
+
+    if (owner) {
+      await this.usuarioRelatorioRepository.save({
+        usuarioId: Number(owner.id),
+        relatorioId: Number(saved.id),
+        permitirConhecimentoIa: false,
+      });
+    }
+
+    return saved;
   }
 
   async findAllPaginated(
@@ -403,21 +421,32 @@ export class ReportService {
   }
 
   async getRelatoriosByUser(userId: number) {
-    const user = await this.userRepository.findOne({ where: { id: userId } });
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      relations: { usuarioRelatorios: { relatorio: true } },
+    });
 
     if (!user) {
       throw new NotFoundException('Usuario não localizado');
     }
 
-    const relatorios = await this.relatorioRepository
-      .createQueryBuilder('relatorio')
-      .leftJoin('relatorio.usuario', 'usuario')
-      .where('usuario.id = :userId', { userId })
-      .andWhere('relatorio.privacidade = :privacidade', {
-        privacidade: Privacidade.PRIVAT,
+    const relatorios = (user.usuarioRelatorios ?? [])
+      .map((grant) => {
+        if (!grant.relatorio) {
+          return null;
+        }
+
+        return {
+          ...grant.relatorio,
+          permitirConhecimentoIa: grant.permitirConhecimentoIa,
+        };
       })
-      .orderBy('relatorio.nome', 'ASC')
-      .getMany();
+      .filter((relatorio): relatorio is Relatorio & { permitirConhecimentoIa: boolean } => {
+        return (
+          relatorio != null && relatorio.privacidade === Privacidade.PRIVAT
+        );
+      })
+      .sort((left, right) => left.nome.localeCompare(right.nome));
 
     const relatoriosDisponiveis = await this.relatorioRepository
       .createQueryBuilder('relatorio')
@@ -443,23 +472,30 @@ export class ReportService {
     return { relatorios, relatoriosDisponiveis };
   }
 
-  async assignUsers(relatorioId: number, usuarios: number[]): Promise<void> {
+  async assignUsers(
+    relatorioId: number,
+    usuarios: Array<{ id: number; permitirConhecimentoIa?: boolean }>,
+  ): Promise<void> {
     await this.relatorioRepository.manager.transaction(async (manager) => {
       const relatorioRepository = manager.getRepository(Relatorio);
       const userRepository = manager.getRepository(Usuario);
+      const usuarioRelatorioRepository =
+        manager.getRepository(UsuarioRelatorio);
 
       const relatorio = await relatorioRepository.findOne({
         where: { id: relatorioId },
-        relations: { usuario: true },
+        relations: { usuarioRelatorios: true },
       });
 
       if (!relatorio) {
         throw new NotFoundException('Relatório não localizado');
       }
 
+      const usuarioIds = usuarios.map((item) => item.id);
+
       if (
         relatorio.id_proprietario &&
-        !usuarios.includes(relatorio.id_proprietario)
+        !usuarioIds.includes(relatorio.id_proprietario)
       ) {
         throw new BadRequestException(
           'Usuário proprietário não pode ser removido da lista de permissão',
@@ -472,18 +508,17 @@ export class ReportService {
         );
       }
 
-      const users = usuarios.length
-        ? await userRepository.find({ where: { id: In(usuarios) } })
+      const users = usuarioIds.length
+        ? await userRepository.find({ where: { id: In(usuarioIds) } })
         : [];
 
-      if (users.length !== usuarios.length) {
+      if (users.length !== usuarioIds.length) {
         throw new BadRequestException('Algum usuário não foi encontrado.');
       }
 
       const blocked = users.find(
         (user) =>
-          user.bloqueado &&
-          !relatorio.usuario.some((associado) => associado.id === user.id),
+          user.bloqueado && !relatorioHasUserGrant(relatorio, Number(user.id)),
       );
 
       if (blocked) {
@@ -492,8 +527,15 @@ export class ReportService {
         );
       }
 
-      relatorio.usuario = users;
-      await relatorioRepository.save(relatorio);
+      await usuarioRelatorioRepository.delete({ relatorioId });
+      if (usuarios.length > 0) {
+        const grants = buildRelatorioUsuarioGrants(
+          relatorioId,
+          usuarios,
+          relatorio.usuarioRelatorios ?? [],
+        );
+        await usuarioRelatorioRepository.save(grants);
+      }
     });
   }
 
@@ -504,14 +546,16 @@ export class ReportService {
 
       const relatorio = await relatorioRepository.findOne({
         where: { id },
-        relations: { usuario: true },
+        relations: { usuarioRelatorios: { usuario: true } },
       });
 
       if (!relatorio) {
         throw new NotFoundException('Relatório não localizado');
       }
 
-      for (const user of relatorio.usuario ?? []) {
+      for (const grant of relatorio.usuarioRelatorios ?? []) {
+        const user = grant.usuario;
+        if (!user) continue;
         if (user.relatorios_favoritos?.includes(id)) {
           user.relatorios_favoritos = user.relatorios_favoritos.filter(
             (relatorioId) => relatorioId !== id,
@@ -520,8 +564,7 @@ export class ReportService {
         }
       }
 
-      relatorio.usuario = [];
-      await relatorioRepository.save(relatorio);
+      await manager.getRepository(UsuarioRelatorio).delete({ relatorioId: id });
       await relatorioRepository.delete({ id });
     });
 
@@ -534,7 +577,7 @@ export class ReportService {
   ): Promise<Relatorio> {
     const user = await this.userRepository.findOne({
       where: { id: userId },
-      relations: { relatorio: true, regra: true },
+      relations: { usuarioRelatorios: true, regra: true },
     });
 
     if (!user) {
@@ -543,14 +586,14 @@ export class ReportService {
 
     const relatorio = await this.relatorioRepository.findOne({
       where: { id },
-      relations: { usuario: { foto: true }, conexao: true },
+      relations: { usuarioRelatorios: { usuario: { foto: true } }, conexao: true },
     });
 
     if (!relatorio) {
       throw new NotFoundException('Relatório não localizado');
     }
 
-    const associado = user.relatorio.some((item) => item.id === relatorio.id);
+    const associado = userHasRelatorioGrant(user, relatorio.id);
     const admin = this.isAdminOrReportRole(user);
     const proprietario = relatorio.id_proprietario === Number(user.id);
 
@@ -572,7 +615,8 @@ export class ReportService {
   private baseQuery(): SelectQueryBuilder<Relatorio> {
     return this.relatorioRepository
       .createQueryBuilder('relatorio')
-      .leftJoinAndSelect('relatorio.usuario', 'usuario')
+      .leftJoinAndSelect('relatorio.usuarioRelatorios', 'usuarioRelatorio')
+      .leftJoinAndSelect('usuarioRelatorio.usuario', 'usuario')
       .leftJoinAndSelect('relatorio.conexao', 'conexao')
       .orderBy('relatorio.nome', 'ASC');
   }
@@ -739,7 +783,7 @@ export class ReportService {
       .andWhere(
         `(
           relatorio.privacidade = :publico
-          OR (relatorio.privacidade = :privado AND usuario.id = :userId)
+          OR (relatorio.privacidade = :privado AND usuarioRelatorio.usuario_id = :userId)
         )`,
         {
           publico: Privacidade.PUBLIC,

@@ -30,6 +30,7 @@ import { Usuario } from './database/entities/Usuarios';
 import { Dashboard } from './database/entities/Dashboards';
 import { Conexao } from './database/entities/Conexoes';
 import { Relatorio } from './database/entities/Relatorios';
+import { UsuarioRelatorio } from './database/entities/UsuarioRelatorio';
 import { env } from './shared/env.schema';
 
 const isThrottlingEnabled = env.NODE_ENV !== 'development';
@@ -62,7 +63,7 @@ const isThrottlingEnabled = env.NODE_ENV !== 'development';
     IconModule,
     SystemMetricsModule,
     AiModule,
-    TypeOrmModule.forFeature([Permissao, Regra, Usuario, Dashboard, Conexao, Relatorio]),
+    TypeOrmModule.forFeature([Permissao, Regra, Usuario, Dashboard, Conexao, Relatorio, UsuarioRelatorio]),
   ],
   providers: [
     SyncRolesAndPermissions,

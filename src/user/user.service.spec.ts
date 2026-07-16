@@ -249,6 +249,21 @@ describe('UsersService', () => {
       );
     });
 
+    it('applies text filter on full name (nome + sobrenome)', async () => {
+      const { service, queryBuilder } = buildListQueryMocks();
+
+      await service.findAllPaginated({
+        page: 1,
+        limit: 10,
+        filter: 'Lucas Barcellos',
+      });
+
+      expect(queryBuilder.andWhere).toHaveBeenCalledWith(
+        expect.stringContaining("CONCAT(usuario.nome, ' ', usuario.sobrenome)"),
+        { textFilter: '%Lucas Barcellos%' },
+      );
+    });
+
     it('applies bloqueado filter when provided', async () => {
       const { service, queryBuilder } = buildListQueryMocks();
 

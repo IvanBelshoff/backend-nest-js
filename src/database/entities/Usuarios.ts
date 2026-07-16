@@ -8,12 +8,13 @@ import {
   UpdateDateColumn,
   ManyToMany,
   JoinTable,
+  OneToMany,
 } from 'typeorm';
 import { Foto } from './Fotos';
 import { Permissao } from './Permissoes';
 import { Regra } from './Regras';
 import { Dashboard } from './Dashboards';
-import { Relatorio } from './Relatorios';
+import { UsuarioRelatorio } from './UsuarioRelatorio';
 import type { UsuarioPreferenciasUi } from 'src/user/types/usuario-preferencias-ui.types';
 
 @Entity('usuarios')
@@ -96,17 +97,8 @@ export class Usuario {
   })
   dashboard: Dashboard[];
 
-  @ManyToMany(() => Relatorio, (relatorio) => relatorio.usuario, {
-    cascade: true,
-    onDelete: 'CASCADE',
-    onUpdate: 'SET NULL',
-  })
-  @JoinTable({
-    name: 'usuarios_relatorios',
-    joinColumns: [{ name: 'usuario_id' }],
-    inverseJoinColumns: [{ name: 'relatorio_id' }],
-  })
-  relatorio: Relatorio[];
+  @OneToMany(() => UsuarioRelatorio, (usuarioRelatorio) => usuarioRelatorio.usuario)
+  usuarioRelatorios: UsuarioRelatorio[];
 
   @OneToOne(() => Foto, (foto) => foto.usuario, {
     cascade: true,

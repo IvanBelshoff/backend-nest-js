@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { Conexao, TipoConexao } from 'src/database/entities/Conexoes';
 import { EstadoRelatorio, Relatorio } from 'src/database/entities/Relatorios';
 import { Usuario } from 'src/database/entities/Usuarios';
+import { UsuarioRelatorio } from 'src/database/entities/UsuarioRelatorio';
 import { env } from '../env.schema';
 import { logger } from './Logger';
 import {
@@ -21,6 +22,8 @@ export class SeedRelatoriosService implements OnApplicationBootstrap {
     private conexaoRepository: Repository<Conexao>,
     @InjectRepository(Usuario)
     private userRepository: Repository<Usuario>,
+    @InjectRepository(UsuarioRelatorio)
+    private usuarioRelatorioRepository: Repository<UsuarioRelatorio>,
   ) {}
 
   private shouldRunBootstrapSeeds(): boolean {
@@ -86,10 +89,14 @@ export class SeedRelatoriosService implements OnApplicationBootstrap {
         id_proprietario: admin.id,
         usuario_cadastrador: ownerName,
         usuario_atualizador: ownerName,
-        usuario: [admin],
       });
 
-      await this.relatorioRepository.save(relatorio);
+      const saved = await this.relatorioRepository.save(relatorio);
+      await this.usuarioRelatorioRepository.save({
+        usuarioId: Number(admin.id),
+        relatorioId: Number(saved.id),
+        permitirConhecimentoIa: false,
+      });
     }
 
     logger.info(`Seeded ${reportSeedData.length} relatórios successfully`);
