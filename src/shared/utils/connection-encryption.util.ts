@@ -33,9 +33,16 @@ export function encryptConnectionPassword(plain: string): string {
 }
 
 export function decryptConnectionPassword(encrypted: string): string {
-  const [ivB64, tagB64, dataB64] = encrypted.split(':');
+  const parts = encrypted.split(':');
+  if (parts.length < 3) {
+    throw new Error('Formato de senha criptografada inválido');
+  }
 
-  if (!ivB64 || !tagB64 || !dataB64) {
+  const ivB64 = parts[0];
+  const tagB64 = parts[1];
+  const dataB64 = parts.slice(2).join(':');
+
+  if (!ivB64 || !tagB64) {
     throw new Error('Formato de senha criptografada inválido');
   }
 

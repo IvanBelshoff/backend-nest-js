@@ -120,7 +120,7 @@ export class ConnectionService {
     connection.database = dto.database ?? connection.database;
     connection.usuario = dto.usuario ?? connection.usuario;
 
-    if (dto.senha) {
+    if (dto.senha !== undefined) {
       connection.senha_criptografada = encryptConnectionPassword(dto.senha);
     }
 

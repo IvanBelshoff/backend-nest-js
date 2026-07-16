@@ -19,6 +19,7 @@ import { AiAccessGuard } from './ai-access.guard';
 import { AiAccessService } from './ai-access.service';
 import { AiChatService } from './ai-chat.service';
 import { AiChatPersistenceService } from './ai-chat-persistence.service';
+import { AiService } from './ai.service';
 import {
   aiChatSchema,
   createAiThreadSchema,
@@ -30,9 +31,19 @@ import {
 export class AiController {
   constructor(
     private readonly aiAccessService: AiAccessService,
+    private readonly aiService: AiService,
     private readonly aiChatService: AiChatService,
     private readonly aiChatPersistenceService: AiChatPersistenceService,
   ) {}
+
+  @Get('health')
+  async getHealth(@Request() req: UserRequest) {
+    if (!req.user) {
+      throw new UnauthorizedException();
+    }
+
+    return this.aiService.checkHealth();
+  }
 
   @Get('access')
   async getAccess(@Request() req: UserRequest) {

@@ -9,7 +9,7 @@ export const updateConnectionSchema = z
     porta: z.coerce.number().int().positive().optional(),
     database: z.string().trim().min(1).optional(),
     usuario: z.string().trim().min(1).optional(),
-    senha: z.string().min(1).optional(),
+    senha: z.string().optional(),
     opcoes: z.record(z.string(), z.unknown()).nullable().optional(),
   })
   .strict();

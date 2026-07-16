@@ -13,7 +13,7 @@ export const createConnectionSchema = z
     porta: z.coerce.number().int().positive(),
     database: z.string().trim().min(1, 'Database é obrigatório'),
     usuario: z.string().trim().min(1, 'Usuário é obrigatório'),
-    senha: z.string().min(1, 'Senha é obrigatória'),
+    senha: z.string(),
     opcoes: z.record(z.string(), z.unknown()).optional(),
   })
   .strict();

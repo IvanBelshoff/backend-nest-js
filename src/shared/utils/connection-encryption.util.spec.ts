@@ -17,4 +17,9 @@ describe('connection-encryption.util', () => {
     expect(encrypted).not.toContain(plain);
     expect(decryptConnectionPassword(encrypted)).toBe(plain);
   });
+
+  it('encrypts and decrypts empty password round-trip', () => {
+    const encrypted = encryptConnectionPassword('');
+    expect(decryptConnectionPassword(encrypted)).toBe('');
+  });
 });
