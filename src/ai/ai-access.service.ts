@@ -8,7 +8,7 @@ import { Repository } from 'typeorm';
 import { Usuario } from 'src/database/entities/Usuarios';
 import { UsuarioRelatorio } from 'src/database/entities/UsuarioRelatorio';
 
-export const AI_USE_PERMISSION = 'PERMISSAO_USAR_IA';
+export const AI_ROLE_NAME = 'REGRA_IA';
 export const ADMIN_ROLE_NAME = 'REGRA_ADMIN';
 
 export interface AiAccessStatus {
@@ -52,7 +52,7 @@ export class AiAccessService {
   private async loadUser(userId: number): Promise<Usuario> {
     const user = await this.userRepository.findOne({
       where: { id: userId },
-      relations: { regra: true, permissao: true },
+      relations: { regra: true },
     });
 
     if (!user) {
@@ -73,16 +73,14 @@ export class AiAccessService {
     }
 
     const isAdmin = this.userIsAdmin(user);
-    const hasPermission =
+    const hasAiAccess =
       isAdmin ||
-      (user.permissao ?? []).some(
-        (permissao) => permissao.nome === AI_USE_PERMISSION,
-      );
+      (user.regra ?? []).some((regra) => regra.nome === AI_ROLE_NAME);
 
-    if (!hasPermission) {
+    if (!hasAiAccess) {
       return {
         eligible: false,
-        reason: 'Permissão PERMISSAO_USAR_IA não concedida.',
+        reason: 'Regra REGRA_IA não concedida.',
         relatoriosDisponiveis: 0,
         isAdmin,
       };

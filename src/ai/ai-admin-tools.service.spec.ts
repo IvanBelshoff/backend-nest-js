@@ -75,7 +75,7 @@ describe('AiAdminToolsService', () => {
           bloqueado: false,
           preferencias_ui: { theme: 'dark' },
           regra: [{ nome: 'REGRA_ADMIN' }],
-          permissao: [{ nome: 'PERMISSAO_USAR_IA' }],
+          permissao: [],
         },
       ],
     });
@@ -90,7 +90,7 @@ describe('AiAdminToolsService', () => {
       email: 'admin@test.com',
       bloqueado: false,
       regras: ['REGRA_ADMIN'],
-      permissoes: ['PERMISSAO_USAR_IA'],
+      permissoes: [],
     });
     expect(result.usuarios[0]).not.toHaveProperty('preferencias_ui');
   });

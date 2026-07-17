@@ -31,7 +31,8 @@ Todas as variáveis obrigatórias estão documentadas em [`.env.example`](.env.e
 | `DB_*` | Conexão PostgreSQL |
 | `JWT_SECRET` | Secret do access token |
 | `REFRESH_TOKEN_PEPPER` | Pepper do refresh token (mín. 32 chars) |
-| `CORS_ORIGIN` | Origens do frontend, separadas por vírgula (credentials) |
+| `HOST_IP` | IP da máquina na rede (referência; alinhar com `VITE_HOST_IP` do frontend) |
+| `CORS_ORIGIN` | Origem do frontend com IP (`http://<HOST_IP>:5173`; credentials exige lista explícita) |
 | `REGRAS_PERMISSOES` | JSON de roles → permissões |
 | `SYNC_ROLES_ON_STARTUP` | Sincronizar RBAC no bootstrap |
 | `SWAGGER_ENABLED` | Força `/docs` mesmo em production |
@@ -108,6 +109,8 @@ Listagens paginadas retornam o total no header **`x-total-count`** (exposto via 
 Matriz completa de autorização: [`src/shared/constants/auth-endpoints.ts`](src/shared/constants/auth-endpoints.ts).
 
 ## Autenticação (frontend)
+
+O refresh token é enviado **somente** via cookie HttpOnly (`refresh_token`, path `/auth`). Frontend e API devem usar o **mesmo IP** (ex.: `http://10.27.6.161:5173` e `http://10.27.6.161:3000`). Não misture `localhost` com IP da rede.
 
 1. `POST /auth/login` — body `{ email, senha }` → `{ access_token, expires_in }` + cookie `refresh_token`
 2. Enviar `Authorization: Bearer <access_token>` nas rotas protegidas

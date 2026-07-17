@@ -1,8 +1,5 @@
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
-import {
-  AI_USE_PERMISSION,
-  AiAccessService,
-} from './ai-access.service';
+import { AI_ROLE_NAME, AiAccessService } from './ai-access.service';
 
 describe('AiAccessService', () => {
   const userRepository = {
@@ -26,8 +23,7 @@ describe('AiAccessService', () => {
     userRepository.findOne.mockResolvedValue({
       id: 1,
       bloqueado: true,
-      regra: [],
-      permissao: [{ nome: AI_USE_PERMISSION }],
+      regra: [{ nome: AI_ROLE_NAME }],
     });
 
     const status = await service.getAccessStatus(1);
@@ -40,18 +36,17 @@ describe('AiAccessService', () => {
     });
   });
 
-  it('returns ineligible when permission is missing', async () => {
+  it('returns ineligible when role is missing', async () => {
     userRepository.findOne.mockResolvedValue({
       id: 2,
       bloqueado: false,
       regra: [],
-      permissao: [],
     });
 
     const status = await service.getAccessStatus(2);
 
     expect(status.eligible).toBe(false);
-    expect(status.reason).toContain('PERMISSAO_USAR_IA');
+    expect(status.reason).toContain('REGRA_IA');
   });
 
   it('allows admin without report grants', async () => {
@@ -59,7 +54,6 @@ describe('AiAccessService', () => {
       id: 3,
       bloqueado: false,
       regra: [{ nome: 'REGRA_ADMIN' }],
-      permissao: [],
     });
 
     const status = await service.getAccessStatus(3);
@@ -76,8 +70,7 @@ describe('AiAccessService', () => {
     userRepository.findOne.mockResolvedValue({
       id: 4,
       bloqueado: false,
-      regra: [],
-      permissao: [{ nome: AI_USE_PERMISSION }],
+      regra: [{ nome: AI_ROLE_NAME }],
     });
     usuarioRelatorioRepository.count.mockResolvedValue(0);
 
@@ -91,8 +84,7 @@ describe('AiAccessService', () => {
     userRepository.findOne.mockResolvedValue({
       id: 5,
       bloqueado: false,
-      regra: [],
-      permissao: [{ nome: AI_USE_PERMISSION }],
+      regra: [{ nome: AI_ROLE_NAME }],
     });
     usuarioRelatorioRepository.count.mockResolvedValue(2);
 
@@ -110,7 +102,6 @@ describe('AiAccessService', () => {
       id: 6,
       bloqueado: false,
       regra: [],
-      permissao: [],
     });
 
     await expect(service.assertCanUseAi(6)).rejects.toBeInstanceOf(

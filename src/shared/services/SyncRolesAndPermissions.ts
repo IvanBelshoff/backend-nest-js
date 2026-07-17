@@ -192,7 +192,10 @@ export class SyncRolesAndPermissions implements OnApplicationBootstrap {
         roleName: regraAdicionada.nome,
       });
 
-      if (regraAdicionada.nome === 'REGRA_ADMIN') {
+      if (
+        regraAdicionada.nome === 'REGRA_ADMIN' ||
+        regraAdicionada.nome === 'REGRA_IA'
+      ) {
         continue;
       }
 

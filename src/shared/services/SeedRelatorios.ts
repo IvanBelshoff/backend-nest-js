@@ -8,8 +8,9 @@ import { UsuarioRelatorio } from 'src/database/entities/UsuarioRelatorio';
 import { env } from '../env.schema';
 import { logger } from './Logger';
 import {
-  REPORT_SEED_MARKER_NAME,
-  reportSeedData,
+  REPORT_CATALOG_CONNECTION_NAME,
+  REPORT_CATALOG_MARKER_NAME,
+  reportCatalogSeedData,
 } from '../seeds/report-seed.data';
 import { encryptConnectionPassword } from '../utils/connection-encryption.util';
 
@@ -34,11 +35,11 @@ export class SeedRelatoriosService implements OnApplicationBootstrap {
     logger.info('Seeding relatórios...');
 
     const existing = await this.relatorioRepository.findOneBy({
-      nome: REPORT_SEED_MARKER_NAME,
+      nome: REPORT_CATALOG_MARKER_NAME,
     });
 
     if (existing) {
-      logger.info('Report seed data already exists');
+      logger.info('Report catalog seed data already exists');
       return;
     }
 
@@ -52,13 +53,13 @@ export class SeedRelatoriosService implements OnApplicationBootstrap {
     }
 
     let conexao = await this.conexaoRepository.findOneBy({
-      nome: '__seed_conexao_local__',
+      nome: REPORT_CATALOG_CONNECTION_NAME,
     });
 
     if (!conexao) {
       conexao = await this.conexaoRepository.save(
         this.conexaoRepository.create({
-          nome: '__seed_conexao_local__',
+          nome: REPORT_CATALOG_CONNECTION_NAME,
           tipo: TipoConexao.POSTGRES,
           host: env.DB_HOST,
           porta: env.DB_PORT,
@@ -73,7 +74,7 @@ export class SeedRelatoriosService implements OnApplicationBootstrap {
 
     const ownerName = `${admin.nome} ${admin.sobrenome}`;
 
-    for (const seed of reportSeedData) {
+    for (const seed of reportCatalogSeedData) {
       const relatorio = this.relatorioRepository.create({
         nome: seed.nome,
         icone: seed.icone,
@@ -99,7 +100,7 @@ export class SeedRelatoriosService implements OnApplicationBootstrap {
       });
     }
 
-    logger.info(`Seeded ${reportSeedData.length} relatórios successfully`);
+    logger.info(`Seeded ${reportCatalogSeedData.length} relatórios successfully`);
   }
 
   async onApplicationBootstrap() {
