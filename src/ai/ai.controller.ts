@@ -19,6 +19,7 @@ import { AiAccessGuard } from './ai-access.guard';
 import { AiAccessService } from './ai-access.service';
 import { AiChatService } from './ai-chat.service';
 import { AiChatPersistenceService } from './ai-chat-persistence.service';
+import { AiMentionService } from './ai-mention.service';
 import { AiService } from './ai.service';
 import {
   aiChatSchema,
@@ -34,6 +35,7 @@ export class AiController {
     private readonly aiService: AiService,
     private readonly aiChatService: AiChatService,
     private readonly aiChatPersistenceService: AiChatPersistenceService,
+    private readonly aiMentionService: AiMentionService,
   ) {}
 
   @Get('health')
@@ -52,6 +54,16 @@ export class AiController {
     }
 
     return this.aiAccessService.getAccessStatus(Number(req.user.sub));
+  }
+
+  @Get('mentions/relatorios')
+  @UseGuards(AiAccessGuard)
+  async listMentionRelatorios(@Request() req: UserRequest) {
+    if (!req.user) {
+      throw new UnauthorizedException();
+    }
+
+    return this.aiMentionService.listMentionRelatorios(Number(req.user.sub));
   }
 
   @Get('threads')
@@ -150,6 +162,7 @@ export class AiController {
       user: req.authUser,
       messages: body.messages as unknown as UIMessage[],
       threadId: body.threadId,
+      mentions: body.mentions,
       res,
     });
   }

@@ -126,6 +126,7 @@ export const AUTH_ENDPOINT_MATRIX = {
   },
   ai: {
     'GET /ai/access': { role: ['REGRA_IA'] },
+    'GET /ai/mentions/relatorios': { role: ['REGRA_IA'] },
     'GET /ai/threads': { role: ['REGRA_IA'] },
     'POST /ai/threads': { role: ['REGRA_IA'] },
     'GET /ai/threads/:id/messages': { role: ['REGRA_IA'] },

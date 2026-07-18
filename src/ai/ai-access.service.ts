@@ -10,6 +10,8 @@ import { UsuarioRelatorio } from 'src/database/entities/UsuarioRelatorio';
 
 export const AI_ROLE_NAME = 'REGRA_IA';
 export const ADMIN_ROLE_NAME = 'REGRA_ADMIN';
+export const USER_ROLE_NAME = 'REGRA_USUARIO';
+export const DASHBOARD_ROLE_NAME = 'REGRA_DASHBOARD';
 
 export interface AiAccessStatus {
   eligible: boolean;
@@ -47,6 +49,23 @@ export class AiAccessService {
   async isAdmin(userId: number): Promise<boolean> {
     const user = await this.loadUser(userId);
     return this.userIsAdmin(user);
+  }
+
+  async hasRole(userId: number, roleName: string): Promise<boolean> {
+    const user = await this.loadUser(userId);
+    if (this.userIsAdmin(user)) {
+      return true;
+    }
+
+    return (user.regra ?? []).some((regra) => regra.nome === roleName);
+  }
+
+  async canMentionUsers(userId: number): Promise<boolean> {
+    return this.hasRole(userId, USER_ROLE_NAME);
+  }
+
+  async canMentionDashboards(userId: number): Promise<boolean> {
+    return this.hasRole(userId, DASHBOARD_ROLE_NAME);
   }
 
   private async loadUser(userId: number): Promise<Usuario> {

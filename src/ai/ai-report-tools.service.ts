@@ -24,6 +24,7 @@ export interface AiReportSummary {
 }
 
 export interface AiReportListForAi {
+  total: number;
   relatorios: Array<{ nome: string }>;
   referenciaInterna: Array<{ id: number; nome: string; estado: string }>;
 }
@@ -32,6 +33,7 @@ export function toPublicReportList(
   summaries: Array<Pick<AiReportSummary, 'id' | 'nome' | 'estado'>>,
 ): AiReportListForAi {
   return {
+    total: summaries.length,
     relatorios: summaries.map((report) => ({ nome: report.nome })),
     referenciaInterna: summaries.map((report) => ({
       id: report.id,
@@ -239,7 +241,7 @@ export class AiReportToolsService {
     };
   }
 
-  private async assertAiKnowledgeAccess(
+  async assertAiKnowledgeAccess(
     userId: number,
     relatorioId: number,
   ): Promise<void> {

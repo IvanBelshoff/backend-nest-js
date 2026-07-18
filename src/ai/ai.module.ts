@@ -17,6 +17,7 @@ import { AiAccessGuard } from './ai-access.guard';
 import { AiAdminToolsService } from './ai-admin-tools.service';
 import { AiChatService } from './ai-chat.service';
 import { AiChatPersistenceService } from './ai-chat-persistence.service';
+import { AiMentionService } from './ai-mention.service';
 import { AiReportToolsService } from './ai-report-tools.service';
 import { AiThreadTitleService } from './ai-thread-title.service';
 
@@ -42,6 +43,7 @@ import { AiThreadTitleService } from './ai-thread-title.service';
     AiAccessGuard,
     AiChatService,
     AiChatPersistenceService,
+    AiMentionService,
     AiReportToolsService,
     AiAdminToolsService,
     AiThreadTitleService,

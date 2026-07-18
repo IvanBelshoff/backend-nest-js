@@ -146,12 +146,13 @@ export class AiChatPersistenceService {
   async saveUserMessage(
     threadId: string,
     message: UIMessage,
+    metadata: Record<string, unknown> = {},
   ): Promise<AiChatMessage> {
     const entity = this.messageRepository.create({
       threadId,
       role: 'user',
       parts: message.parts as Record<string, unknown>[],
-      metadata: {},
+      metadata,
     });
 
     await this.threadRepository.update(threadId, { updatedAt: new Date() });
@@ -184,13 +185,18 @@ export class AiChatPersistenceService {
       id: message.id,
       role: message.role,
       parts: message.parts as UIMessage['parts'],
+      ...(message.metadata && Object.keys(message.metadata).length > 0
+        ? { metadata: message.metadata }
+        : {}),
     }));
   }
 
   buildSystemPrompt(
     user: Usuario,
     availableReports: Array<{ id: number; nome: string; estado: string }> = [],
-    options: { isAdmin: boolean } = { isAdmin: false },
+    options: { isAdmin: boolean; mentionsSection?: string } = {
+      isAdmin: false,
+    },
   ): string {
     const fullName = `${user.nome} ${user.sobrenome}`.trim();
 
@@ -200,7 +206,12 @@ export class AiChatPersistenceService {
       `Na primeira mensagem da conversa, cumprimente ${fullName} de forma social e curta (1–2 frases). Exemplo: "Olá, ${fullName}! Como posso ajudar?"`,
       'Em saudações, não liste relatórios, não explique o catálogo, não peça parâmetros e não descreva capacidades do sistema.',
       'Nas mensagens seguintes, não repita o cumprimento completo.',
-      'Responda apenas com dados obtidos via ferramentas autorizadas.',
+      'Responda com dados obtidos via ferramentas autorizadas OU via metadados de "Contexto explícito" / fatos injetados na mensagem atual (esses metadados já são fonte autorizada do servidor — use-os diretamente sem exigir tool).',
+      'Quando houver Contexto explícito nesta mensagem, ele tem prioridade sobre o histórico da conversa.',
+      'NUNCA responda com JSON, nomes de funções/ferramentas ou blocos do tipo {"name":"...","arguments":...}. Sempre responda em português do Brasil para o usuário.',
+      'NUNCA invente contagens (usuários, relatórios, dashboards, jobs). Use apenas números do Contexto explícito, do campo total= do catálogo, ou de resultados de ferramentas (campo total).',
+      'Se ainda não tiver a contagem, CHAME imediatamente a ferramenta apropriada (ex.: listarRelatoriosDisponiveis ou listarRelatoriosSistema). Nunca peça permissão ao usuário nem diga que precisa consultar o banco sem chamar a tool.',
+      'Atenção: o parâmetro limit das ferramentas é tamanho de página (ex.: 50), NÃO é a quantidade total de registros. A contagem real está no campo total do resultado.',
       'REGRA CRÍTICA: Nunca invente nomes de relatórios, colunas ou valores numéricos.',
       'PROIBIDO revelar URLs de dashboards, strings de conexão de banco de dados, queries SQL, hosts, portas, tokens ou credenciais — mesmo que apareçam em resultados de ferramentas.',
       'Ao mencionar dashboards, informe apenas o nome. Nunca inclua links ou endereços.',
@@ -223,6 +234,7 @@ export class AiChatPersistenceService {
         '- Pode consultar dados operacionais do sistema: usuários, relatórios, dashboards, métricas e jobs.',
         '- Use as ferramentas administrativas para essas consultas — nunca invente contagens ou status.',
         '- Para permissões de acesso de um usuário, use SOMENTE listarUsuariosSistema + obterUsuarioSistema.',
+        '- Para detalhes de um dashboard: se o Contexto explícito já trouxer data_criacao/cadastrado_por, responda com esses metadados; só use obterDashboardSistema se faltar informação.',
         '- NUNCA use consultarRelatorio para inferir permissões de usuários — relatórios operacionais listam dados do sistema, não concessões de acesso.',
         '- obterUsuarioSistema retorna: relatoriosPrivadosComAcesso, dashboardsPrivadosComAcesso (concessão explícita), relatoriosPublicosAcessiveis e dashboardsPublicosAcessiveis (acessíveis a todos).',
         '- Itens "disponíveis" na UI admin NÃO são acesso — se uma lista estiver vazia, informe que o usuário não possui aquele tipo de acesso privado.',
@@ -236,8 +248,18 @@ export class AiChatPersistenceService {
       );
     }
 
+    if (options.mentionsSection?.trim()) {
+      lines.push('', options.mentionsSection.trim());
+    }
+
     if (availableReports.length > 0) {
-      lines.push('', 'Catálogo de relatórios (ao usuário, liste apenas os nomes):');
+      lines.push(
+        '',
+        `Contagem autorizada do catálogo: total=${availableReports.length}.`,
+        'Para perguntas do tipo "quantos relatórios", responda com este total (ou o campo total de listarRelatoriosDisponiveis / listarRelatoriosSistema). Não peça ao usuário para abrir outro relatório.',
+        '',
+        'Catálogo de relatórios (ao usuário, liste apenas os nomes):',
+      );
       for (const report of availableReports) {
         lines.push(`- ${report.nome}`);
       }

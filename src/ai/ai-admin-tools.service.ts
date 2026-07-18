@@ -59,6 +59,9 @@ export interface AiAdminDashboardSummary {
   privacidade: string;
   visivel: boolean;
   id_proprietario: number | null;
+  data_criacao: string | null;
+  data_atualizacao: string | null;
+  usuario_cadastrador: string | null;
 }
 
 @Injectable()
@@ -155,6 +158,15 @@ export class AiAdminToolsService {
       total,
       dashboards: data.map((dashboard) => this.sanitizeDashboard(dashboard)),
     };
+  }
+
+  async getDashboard(
+    userId: number,
+    dashboardId: number,
+  ): Promise<AiAdminDashboardSummary> {
+    await this.assertAdmin(userId);
+    const dashboard = await this.dashboardService.findById(dashboardId, userId);
+    return this.sanitizeDashboard(dashboard);
   }
 
   async getMetrics(userId: number) {
@@ -291,6 +303,19 @@ export class AiAdminToolsService {
       privacidade: String(dashboard.privacidade ?? 'privado'),
       visivel: dashboard.visivel ?? false,
       id_proprietario: dashboard.id_proprietario ?? null,
+      data_criacao:
+        dashboard.data_criacao instanceof Date
+          ? dashboard.data_criacao.toISOString()
+          : dashboard.data_criacao
+            ? String(dashboard.data_criacao)
+            : null,
+      data_atualizacao:
+        dashboard.data_atualizacao instanceof Date
+          ? dashboard.data_atualizacao.toISOString()
+          : dashboard.data_atualizacao
+            ? String(dashboard.data_atualizacao)
+            : null,
+      usuario_cadastrador: dashboard.usuario_cadastrador ?? null,
     };
   }
 }
