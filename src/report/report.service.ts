@@ -22,11 +22,14 @@ import { env } from 'src/shared/env.schema';
 import {
   buildRelatorioUsuarioGrants,
   getRelatorioAssignedUsers,
+  mapExistingIaByUsuarioId,
   relatorioHasUserGrant,
   userHasRelatorioGrant,
 } from 'src/shared/utils/usuario-relatorio.util';
 import { CreateReportDto, UpdateReportDto } from './dto/create-report.dto';
 import { ReportSnapshotService } from './report-snapshot.service';
+import { resolvePermitirConhecimentoIa } from './report-ai-knowledge.util';
+import { UsuarioRelatorioAccessService } from './usuario-relatorio-access.service';
 import { SchedulerService } from 'src/scheduler/scheduler.service';
 import { AgendamentoVinculoTipo } from 'src/scheduler/entities/scheduler.enums';
 
@@ -70,6 +73,7 @@ export class ReportService {
     @Inject(forwardRef(() => ReportSnapshotService))
     private readonly reportSnapshotService: ReportSnapshotService,
     private readonly schedulerService: SchedulerService,
+    private readonly usuarioRelatorioAccessService: UsuarioRelatorioAccessService,
   ) {}
 
   async create(dto: CreateReportDto, requester: Requester): Promise<Relatorio> {
@@ -145,10 +149,7 @@ export class ReportService {
     userId: number,
     params: UserPrivateReportListParams,
   ): Promise<{ data: Relatorio[]; total: number; favoritos: number[] }> {
-    const user = await this.userRepository.findOne({
-      where: { id: userId },
-      relations: { regra: true },
-    });
+    const user = await this.userRepository.findOne({ where: { id: userId } });
 
     if (!user) {
       throw new NotFoundException('Usuário não localizado');
@@ -179,7 +180,7 @@ export class ReportService {
     query.skip((params.page - 1) * params.limit).take(params.limit);
     const [data, total] = await query.getManyAndCount();
     const dataWithAiKnowledge = data.map((relatorio) =>
-      this.attachAiKnowledgeFlag(relatorio, user),
+      this.attachAiKnowledgeFlag(relatorio, userId),
     );
 
     return {
@@ -252,21 +253,26 @@ export class ReportService {
   async findPrivateById(id: number, userId: number): Promise<Relatorio> {
     const relatorio = await this.findAccessibleById(id, userId);
     this.assertNotExpired(relatorio);
-
-    const user = await this.userRepository.findOne({
-      where: { id: userId },
-      relations: { regra: true },
-    });
-
-    if (!user) {
-      throw new NotFoundException('Usuário não localizado');
-    }
-
-    return this.attachAiKnowledgeFlag(relatorio, user);
+    return this.attachAiKnowledgeFlag(relatorio, userId);
   }
 
   async findById(id: number, userId: number): Promise<Relatorio> {
     return this.findAccessibleById(id, userId);
+  }
+
+  async findReportsWithAiKnowledge(userId: number): Promise<Relatorio[]> {
+    const query = this.baseQuery();
+    this.applyMyReportsAccessRules(query, userId);
+    const relatorios = await query.getMany();
+
+    return relatorios.filter((relatorio) =>
+      resolvePermitirConhecimentoIa(relatorio, userId),
+    );
+  }
+
+  async countReportsWithAiKnowledge(userId: number): Promise<number> {
+    const reports = await this.findReportsWithAiKnowledge(userId);
+    return reports.length;
   }
 
   async getStatus(id: number, userId: number) {
@@ -387,6 +393,11 @@ export class ReportService {
       : relatorio.usuario_atualizador;
 
     const saved = await this.relatorioRepository.save(relatorio);
+
+    if (saved.privacidade === Privacidade.PRIVAT) {
+      await this.usuarioRelatorioAccessService.ensureOwnerGrant(Number(saved.id));
+    }
+
     return { relatorio: saved, shouldGenerateSnapshot };
   }
 
@@ -494,7 +505,7 @@ export class ReportService {
 
   async assignUsers(
     relatorioId: number,
-    usuarios: Array<{ id: number; permitirConhecimentoIa?: boolean }>,
+    usuarios: Array<{ id: number }>,
   ): Promise<void> {
     await this.relatorioRepository.manager.transaction(async (manager) => {
       const relatorioRepository = manager.getRepository(Relatorio);
@@ -549,12 +560,21 @@ export class ReportService {
 
       await usuarioRelatorioRepository.delete({ relatorioId });
       if (usuarios.length > 0) {
+        const existingIaByUsuarioId = mapExistingIaByUsuarioId(
+          relatorio.usuarioRelatorios ?? [],
+        );
         const grants = buildRelatorioUsuarioGrants(
           relatorioId,
           usuarios,
-          relatorio.usuarioRelatorios ?? [],
+          existingIaByUsuarioId,
         );
-        await usuarioRelatorioRepository.save(grants);
+        await usuarioRelatorioRepository.insert(
+          grants.map((grant) => ({
+            usuarioId: grant.usuarioId,
+            relatorioId: grant.relatorioId,
+            permitirConhecimentoIa: grant.permitirConhecimentoIa,
+          })),
+        );
       }
     });
   }
@@ -634,27 +654,12 @@ export class ReportService {
 
   private attachAiKnowledgeFlag(
     relatorio: Relatorio,
-    user: Usuario,
+    userId: number,
   ): Relatorio & { permitir_conhecimento_ia: boolean } {
-    const userId = Number(user.id);
-    const isAdmin = (user.regra ?? []).some(
-      (regra) => regra.nome === 'REGRA_ADMIN',
-    );
-
-    const grant = relatorio.usuarioRelatorios?.find(
-      (usuarioRelatorio) =>
-        Number(usuarioRelatorio.usuarioId) === userId,
-    );
-
-    const permitir_conhecimento_ia =
-      isAdmin || (grant?.permitirConhecimentoIa ?? false);
-
-    const result = {
+    return {
       ...relatorio,
-      permitir_conhecimento_ia,
+      permitir_conhecimento_ia: resolvePermitirConhecimentoIa(relatorio, userId),
     };
-
-    return result;
   }
 
   private baseQuery(): SelectQueryBuilder<Relatorio> {

@@ -108,6 +108,7 @@ describe('AiAdminToolsService', () => {
           privacidade: 'privado',
           visivel: true,
           id_proprietario: 1,
+          usuarioRelatorios: [],
           query: 'SELECT * FROM users',
         },
       ],
@@ -119,6 +120,7 @@ describe('AiAdminToolsService', () => {
       id: 5,
       nome: 'Dashboards por Usuário',
       estado: EstadoRelatorio.ONLINE,
+      conhecimentoIaHabilitado: false,
     });
     expect(result.relatorios[0]).not.toHaveProperty('query');
   });

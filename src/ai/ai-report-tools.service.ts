@@ -12,7 +12,14 @@ import { ReportExecutionService } from 'src/report/execution/report-execution.se
 import { SnapshotQueryService } from 'src/report/snapshot-query.service';
 import { env } from 'src/shared/env.schema';
 import { AiAccessService } from './ai-access.service';
+import { resolvePermitirConhecimentoIa } from 'src/report/report-ai-knowledge.util';
 import { redactSensitiveReportRows, isSensitiveColumnName } from './ai-sensitive-data.util';
+import {
+  buildBlockedReportRefusalMessage,
+  messageMentionsReportName,
+} from './ai-report-name-match.util';
+
+export { buildBlockedReportRefusalMessage };
 
 export interface AiReportSummary {
   id: number;
@@ -104,42 +111,16 @@ export class AiReportToolsService {
   }
 
   private async fetchReportSummaries(userId: number): Promise<AiReportSummary[]> {
-    const isAdmin = await this.aiAccessService.isAdmin(userId);
+    const relatorios = await this.reportService.findReportsWithAiKnowledge(userId);
 
-    if (isAdmin) {
-      const relatorios = await this.relatorioRepository.find({
-        order: { nome: 'ASC' },
-      });
-
-      return relatorios.map((relatorio) => ({
-        id: Number(relatorio.id),
-        nome: relatorio.nome,
-        estado: relatorio.estado,
-        colunas: [],
-        parametros: relatorio.parametros ?? null,
-        permitirConhecimentoIa: true,
-      }));
-    }
-
-    const grants = await this.usuarioRelatorioRepository.find({
-      where: {
-        usuarioId: userId,
-        permitirConhecimentoIa: true,
-      },
-      relations: { relatorio: true },
-      order: { relatorio: { nome: 'ASC' } },
-    });
-
-    return grants
-      .filter((grant) => grant.relatorio != null)
-      .map((grant) => ({
-        id: Number(grant.relatorio.id),
-        nome: grant.relatorio.nome,
-        estado: grant.relatorio.estado,
-        colunas: [],
-        parametros: grant.relatorio.parametros ?? null,
-        permitirConhecimentoIa: true,
-      }));
+    return relatorios.map((relatorio) => ({
+      id: Number(relatorio.id),
+      nome: relatorio.nome,
+      estado: relatorio.estado,
+      colunas: [],
+      parametros: relatorio.parametros ?? null,
+      permitirConhecimentoIa: true,
+    }));
   }
 
   async getReportCatalogForPrompt(
@@ -151,6 +132,37 @@ export class AiReportToolsService {
       nome: report.nome,
       estado: report.estado,
     }));
+  }
+
+  /** Relatórios citados no texto que existem no sistema mas não têm conhecimento IA para o usuário. */
+  async findReportNamesWithoutAiInText(
+    userId: number,
+    text: string,
+  ): Promise<string[]> {
+    if (!text.trim()) {
+      return [];
+    }
+
+    const [iaCatalog, allReports] = await Promise.all([
+      this.reportService.findReportsWithAiKnowledge(userId),
+      this.relatorioRepository.find({
+        select: { id: true, nome: true },
+        order: { nome: 'ASC' },
+      }),
+    ]);
+
+    const iaIds = new Set(iaCatalog.map((report) => Number(report.id)));
+
+    const blocked = allReports
+      .filter((report) => !iaIds.has(Number(report.id)))
+      .filter((report) => messageMentionsReportName(text, report.nome))
+      .map((report) => report.nome);
+
+    return blocked;
+  }
+
+  buildBlockedReportRefusalMessage(names: string[]): string {
+    return buildBlockedReportRefusalMessage(names);
   }
 
   async describeReport(
@@ -245,25 +257,16 @@ export class AiReportToolsService {
     userId: number,
     relatorioId: number,
   ): Promise<void> {
-    await this.reportService.findById(relatorioId, userId);
+    const relatorio = await this.reportService.findById(relatorioId, userId);
 
-    const isAdmin = await this.aiAccessService.isAdmin(userId);
-    if (isAdmin) {
+    const hasIaGrant = resolvePermitirConhecimentoIa(relatorio, userId);
+
+    if (hasIaGrant) {
       return;
     }
 
-    const grant = await this.usuarioRelatorioRepository.findOne({
-      where: {
-        usuarioId: userId,
-        relatorioId,
-        permitirConhecimentoIa: true,
-      },
-    });
-
-    if (!grant) {
-      throw new ForbiddenException(
-        'Conhecimento da IA não habilitado para este relatório.',
-      );
-    }
+    throw new ForbiddenException(
+      'Conhecimento da IA não habilitado para este relatório.',
+    );
   }
 }

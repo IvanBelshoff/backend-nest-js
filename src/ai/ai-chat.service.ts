@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import {
   convertToModelMessages,
+  createUIMessageStream,
   stepCountIs,
   streamText,
   tool,
@@ -208,6 +209,25 @@ export class AiChatService {
       );
     }
 
+    const lastUserPlain =
+      lastMessage?.role === 'user' ? extractTextFromUIMessage(lastMessage) : '';
+    const blockedReportNames =
+      await this.aiReportToolsService.findReportNamesWithoutAiInText(
+        userId,
+        lastUserPlain,
+      );
+
+    if (blockedReportNames.length > 0) {
+      return this.streamFixedAssistantReply({
+        res: params.res,
+        threadId: thread.id,
+        text: this.aiReportToolsService.buildBlockedReportRefusalMessage(
+          blockedReportNames,
+        ),
+        truncatedTitle,
+      });
+    }
+
     const firstUserMessage = params.messages.find((message) => message.role === 'user');
     const firstUserText = firstUserMessage
       ? extractTextFromUIMessage(firstUserMessage)
@@ -248,9 +268,6 @@ export class AiChatService {
       responseHeaders['X-Thread-Title'] = truncatedTitle;
     }
 
-    const lastUserPlain = lastMessage?.role === 'user'
-      ? extractTextFromUIMessage(lastMessage)
-      : '';
     const asksCapabilities = asksCapabilityQuestion(lastUserPlain);
     const asksRelation =
       /rela[cç][aã]o|cruzar|cruzamento|possuem|possuem|que\s+t[eê]m|que\s+possuem/i.test(
@@ -387,6 +404,45 @@ export class AiChatService {
       .catch(() => undefined);
   }
 
+  private async streamFixedAssistantReply(params: {
+    res: Response;
+    threadId: string;
+    text: string;
+    truncatedTitle?: string | null;
+  }): Promise<{ threadId: string }> {
+    const messageId = randomUUID();
+    const responseHeaders: Record<string, string> = {
+      'X-Thread-Id': params.threadId,
+    };
+
+    if (params.truncatedTitle) {
+      responseHeaders['X-Thread-Title'] = params.truncatedTitle;
+    }
+
+    const stream = createUIMessageStream({
+      execute: ({ writer }) => {
+        writer.write({ type: 'text-start', id: messageId });
+        writer.write({ type: 'text-delta', id: messageId, delta: params.text });
+        writer.write({ type: 'text-end', id: messageId });
+      },
+      onEnd: async () => {
+        await this.aiChatPersistenceService.saveAssistantMessage(params.threadId, {
+          id: messageId,
+          role: 'assistant',
+          parts: [{ type: 'text', text: params.text }],
+        });
+      },
+    });
+
+    pipeUIMessageStreamToResponse({
+      response: params.res,
+      stream,
+      headers: responseHeaders,
+    });
+
+    return { threadId: params.threadId };
+  }
+
   private buildReportTools(userId: number) {
     return {
       listarRelatoriosDisponiveis: tool({
@@ -470,7 +526,7 @@ export class AiChatService {
       }),
       listarRelatoriosSistema: tool({
         description:
-          'Lista todos os relatórios cadastrados no sistema (admin). Retorna { total, relatorios }. Use o campo total para "quantos relatórios existem". O parâmetro limit é só tamanho de página. Não inclui query SQL.',
+          'Lista inventário administrativo de relatórios cadastrados (admin): metadados de cadastro, privacidade e se conhecimentoIaHabilitado=true para o usuário atual. Use para perguntas administrativas sobre cadastro/estado. NÃO use para obter linhas de dados — somente consultarRelatorio/descreverRelatorio em relatórios com conhecimento IA no catálogo autorizado.',
         inputSchema: z.object({
           page: z.number().int().positive().optional(),
           limit: z.number().int().positive().max(100).optional(),

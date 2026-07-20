@@ -28,6 +28,11 @@ import {
   type AssignReportUsersDto,
 } from './dto/assign-users.dto';
 import {
+  updateReportUserAiKnowledgeSchema,
+  type UpdateReportUserAiKnowledgeDto,
+} from './dto/update-report-user-ai-knowledge.dto';
+import { UsuarioRelatorioAccessService } from './usuario-relatorio-access.service';
+import {
   createReportSchema,
   executeReportSchema,
   snapshotUpdateSchema,
@@ -79,6 +84,7 @@ export class ReportController {
     private readonly reportExportService: ReportExportService,
     private readonly reportJobService: ReportJobService,
     private readonly schedulerService: SchedulerService,
+    private readonly usuarioRelatorioAccessService: UsuarioRelatorioAccessService,
   ) {}
 
   @Post('/')
@@ -378,6 +384,21 @@ export class ReportController {
     @Body() dto: AssignReportUsersDto,
   ) {
     await this.reportService.assignUsers(id, dto.usuarios);
+  }
+
+  @Patch('/:id/permitir-conhecimento-ia')
+  @Authorization('permission', ['PERMISSAO_CONCEDER_ACESSO_RELATORIO'])
+  @ZodValidation(updateReportUserAiKnowledgeSchema)
+  @HttpCode(204)
+  async updateReportUserAiKnowledge(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateReportUserAiKnowledgeDto,
+  ) {
+    await this.usuarioRelatorioAccessService.updatePermitirConhecimentoIa(
+      dto.usuarioId,
+      id,
+      dto.permitirConhecimentoIa,
+    );
   }
 
   @Patch('/:id')

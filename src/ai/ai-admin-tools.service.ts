@@ -12,6 +12,7 @@ import { MetricsCollectorService } from 'src/system-metrics/metrics-collector.se
 import { MetricsPersistenceService } from 'src/system-metrics/metrics-persistence.service';
 import { UsersService } from 'src/user/user.service';
 import { AiAccessService } from './ai-access.service';
+import { resolvePermitirConhecimentoIa } from 'src/report/report-ai-knowledge.util';
 
 export interface AiAdminUserSummary {
   id: number;
@@ -51,6 +52,7 @@ export interface AiAdminReportSummary {
   privacidade: string;
   visivel: boolean;
   id_proprietario: number | null;
+  conhecimentoIaHabilitado: boolean;
 }
 
 export interface AiAdminDashboardSummary {
@@ -292,7 +294,7 @@ export class AiAdminToolsService {
 
     return {
       total,
-      relatorios: data.map((report) => this.sanitizeReport(report)),
+      relatorios: data.map((report) => this.sanitizeReport(report, userId)),
     };
   }
 
@@ -449,7 +451,10 @@ export class AiAdminToolsService {
     };
   }
 
-  private sanitizeReport(report: Relatorio): AiAdminReportSummary {
+  private sanitizeReport(
+    report: Relatorio,
+    userId: number,
+  ): AiAdminReportSummary {
     return {
       id: Number(report.id),
       nome: report.nome,
@@ -457,6 +462,7 @@ export class AiAdminToolsService {
       privacidade: String(report.privacidade ?? 'privado'),
       visivel: report.visivel ?? false,
       id_proprietario: report.id_proprietario ?? null,
+      conhecimentoIaHabilitado: resolvePermitirConhecimentoIa(report, userId),
     };
   }
 

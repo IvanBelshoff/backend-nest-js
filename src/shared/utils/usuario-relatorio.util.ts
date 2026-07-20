@@ -4,7 +4,6 @@ import { UsuarioRelatorio } from 'src/database/entities/UsuarioRelatorio';
 
 export type RelatorioGrantInput = {
   id: number;
-  permitirConhecimentoIa?: boolean;
 };
 
 export function getUsuarioRelatorios(user: Usuario): Relatorio[] {
@@ -34,39 +33,51 @@ export function relatorioHasUserGrant(relatorio: Relatorio, userId: number): boo
 export function buildUsuarioRelatorioGrants(
   usuarioId: number,
   grants: RelatorioGrantInput[],
-  existing: UsuarioRelatorio[] = [],
+  existingIaByRelatorioId: Map<number, boolean>,
 ): UsuarioRelatorio[] {
-  const existingByRelatorioId = new Map(
-    existing.map((grant) => [Number(grant.relatorioId), grant]),
-  );
-
   return grants.map((grant) => {
-    const current = existingByRelatorioId.get(grant.id);
-    const entity = current ?? new UsuarioRelatorio();
+    const entity = new UsuarioRelatorio();
     entity.usuarioId = usuarioId;
     entity.relatorioId = grant.id;
     entity.permitirConhecimentoIa =
-      grant.permitirConhecimentoIa ?? current?.permitirConhecimentoIa ?? false;
+      existingIaByRelatorioId.get(grant.id) ?? false;
     return entity;
   });
 }
 
 export function buildRelatorioUsuarioGrants(
   relatorioId: number,
-  grants: Array<{ id: number; permitirConhecimentoIa?: boolean }>,
-  existing: UsuarioRelatorio[] = [],
+  grants: Array<{ id: number }>,
+  existingIaByUsuarioId: Map<number, boolean>,
 ): UsuarioRelatorio[] {
-  const existingByUsuarioId = new Map(
-    existing.map((grant) => [Number(grant.usuarioId), grant]),
-  );
-
   return grants.map((grant) => {
-    const current = existingByUsuarioId.get(grant.id);
-    const entity = current ?? new UsuarioRelatorio();
+    const entity = new UsuarioRelatorio();
     entity.usuarioId = grant.id;
     entity.relatorioId = relatorioId;
     entity.permitirConhecimentoIa =
-      grant.permitirConhecimentoIa ?? current?.permitirConhecimentoIa ?? false;
+      existingIaByUsuarioId.get(grant.id) ?? false;
     return entity;
   });
+}
+
+export function mapExistingIaByRelatorioId(
+  existing: UsuarioRelatorio[],
+): Map<number, boolean> {
+  return new Map(
+    existing.map((grant) => [
+      Number(grant.relatorioId),
+      grant.permitirConhecimentoIa,
+    ]),
+  );
+}
+
+export function mapExistingIaByUsuarioId(
+  existing: UsuarioRelatorio[],
+): Map<number, boolean> {
+  return new Map(
+    existing.map((grant) => [
+      Number(grant.usuarioId),
+      grant.permitirConhecimentoIa,
+    ]),
+  );
 }

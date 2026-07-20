@@ -20,6 +20,7 @@ import { UsuarioRelatorio } from 'src/database/entities/UsuarioRelatorio';
 import {
   buildUsuarioRelatorioGrants,
   getUsuarioRelatorios,
+  mapExistingIaByRelatorioId,
   relatorioHasUserGrant,
 } from 'src/shared/utils/usuario-relatorio.util';
 import type { RelatorioGrantInput } from 'src/shared/utils/usuario-relatorio.util';
@@ -901,7 +902,10 @@ export class UsersService {
       }
 
       const owned = await relatorioRepository.find({
-        where: { id_proprietario: Number(user.id) },
+        where: {
+          id_proprietario: Number(user.id),
+          privacidade: Privacidade.PRIVAT,
+        },
       });
 
       const missingOwned = owned.filter(
@@ -916,12 +920,21 @@ export class UsersService {
 
       await usuarioRelatorioRepository.delete({ usuarioId: id });
       if (relatorios.length > 0) {
+        const existingIaByRelatorioId = mapExistingIaByRelatorioId(
+          user.usuarioRelatorios ?? [],
+        );
         const grants = buildUsuarioRelatorioGrants(
           id,
           relatorios,
-          user.usuarioRelatorios ?? [],
+          existingIaByRelatorioId,
         );
-        await usuarioRelatorioRepository.save(grants);
+        await usuarioRelatorioRepository.insert(
+          grants.map((grant) => ({
+            usuarioId: grant.usuarioId,
+            relatorioId: grant.relatorioId,
+            permitirConhecimentoIa: grant.permitirConhecimentoIa,
+          })),
+        );
       }
 
       if (user.relatorios_favoritos?.length) {

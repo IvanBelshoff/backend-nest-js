@@ -9,6 +9,7 @@ import { Permissao } from '../database/entities/Permissoes';
 import { Dashboard } from '../database/entities/Dashboards';
 import { Relatorio } from '../database/entities/Relatorios';
 import { AuthModule } from '../auth/auth.module';
+import { ReportModule } from '../report/report.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { AuthModule } from '../auth/auth.module';
       Relatorio,
     ]),
     forwardRef(() => AuthModule),
+    ReportModule,
   ],
   controllers: [UsersController],
   providers: [UsersService],

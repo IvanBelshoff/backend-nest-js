@@ -6,7 +6,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Usuario } from 'src/database/entities/Usuarios';
-import { UsuarioRelatorio } from 'src/database/entities/UsuarioRelatorio';
+import { ReportService } from 'src/report/report.service';
 
 export const AI_ROLE_NAME = 'REGRA_IA';
 export const ADMIN_ROLE_NAME = 'REGRA_ADMIN';
@@ -25,8 +25,7 @@ export class AiAccessService {
   constructor(
     @InjectRepository(Usuario)
     private readonly userRepository: Repository<Usuario>,
-    @InjectRepository(UsuarioRelatorio)
-    private readonly usuarioRelatorioRepository: Repository<UsuarioRelatorio>,
+    private readonly reportService: ReportService,
   ) {}
 
   async getAccessStatus(userId: number): Promise<AiAccessStatus> {
@@ -106,9 +105,12 @@ export class AiAccessService {
     }
 
     if (isAdmin) {
+      const relatoriosDisponiveis =
+        await this.reportService.countReportsWithAiKnowledge(Number(user.id));
+
       return {
         eligible: true,
-        relatoriosDisponiveis: Number.MAX_SAFE_INTEGER,
+        relatoriosDisponiveis,
         isAdmin: true,
       };
     }
@@ -117,12 +119,8 @@ export class AiAccessService {
   }
 
   private async evaluateReportGrants(userId: number): Promise<AiAccessStatus> {
-    const relatoriosDisponiveis = await this.usuarioRelatorioRepository.count({
-      where: {
-        usuarioId: userId,
-        permitirConhecimentoIa: true,
-      },
-    });
+    const relatoriosDisponiveis =
+      await this.reportService.countReportsWithAiKnowledge(userId);
 
     if (relatoriosDisponiveis < 1) {
       return {

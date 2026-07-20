@@ -3,7 +3,6 @@ import { z } from 'zod';
 const relatorioGrantSchema = z
   .object({
     id: z.coerce.number().int().positive(),
-    permitirConhecimentoIa: z.boolean().optional(),
   })
   .strict();
 

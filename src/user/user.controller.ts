@@ -57,6 +57,11 @@ import {
   assignRelatoriosSchema,
   type AssignRelatoriosDto,
 } from './dto/assign-relatorios.dto';
+import {
+  updateUserReportAiKnowledgeSchema,
+  type UpdateUserReportAiKnowledgeDto,
+} from './dto/update-user-report-ai-knowledge.dto';
+import { UsuarioRelatorioAccessService } from 'src/report/usuario-relatorio-access.service';
 import { ZodValidation } from 'src/shared/decorators/zod-validation.decorator';
 import { Public } from 'src/shared/decorators/auth-public.decorator';
 import { SkipThrottle } from '@nestjs/throttler';
@@ -81,7 +86,10 @@ import {
 @ApiTags('user')
 @ApiBearerAuth('access-token')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly usuarioRelatorioAccessService: UsuarioRelatorioAccessService,
+  ) {}
 
   @Post('/')
   @AuthorizationAll(
@@ -262,6 +270,24 @@ export class UsersController {
     @Body() dto: AssignRelatoriosDto,
   ) {
     await this.usersService.assignRelatorios(id, dto.relatorios);
+  }
+
+  @Patch('/relatorios/:id/permitir-conhecimento-ia')
+  @AuthorizationAll(
+    { type: 'role', required: ['REGRA_USUARIO'] },
+    { type: 'permission', required: ['PERMISSAO_CONCEDER_ACESSO_RELATORIO'] },
+  )
+  @ZodValidation(updateUserReportAiKnowledgeSchema)
+  @HttpCode(204)
+  async updateUserReportAiKnowledge(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateUserReportAiKnowledgeDto,
+  ) {
+    await this.usuarioRelatorioAccessService.updatePermitirConhecimentoIa(
+      id,
+      dto.relatorioId,
+      dto.permitirConhecimentoIa,
+    );
   }
 
   @Patch('/authentication/:id')

@@ -24,6 +24,7 @@ import { SnapshotQueryService } from './snapshot-query.service';
 import { STORAGE_PROVIDER } from './storage/storage-provider.interface';
 import { createStorageProvider } from './storage/storage-provider.factory';
 import { SnapshotCleanupService } from './storage/snapshot-cleanup.service';
+import { UsuarioRelatorioAccessService } from './usuario-relatorio-access.service';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { SnapshotCleanupService } from './storage/snapshot-cleanup.service';
   controllers: [ReportController, ReportJobController],
   providers: [
     ReportService,
+    UsuarioRelatorioAccessService,
     ReportSnapshotService,
     ReportExecutionService,
     ReportJobService,
@@ -51,6 +53,6 @@ import { SnapshotCleanupService } from './storage/snapshot-cleanup.service';
       useFactory: createStorageProvider,
     },
   ],
-  exports: [ReportService, ReportJobService, ReportExecutionService, SnapshotQueryService],
+  exports: [ReportService, ReportJobService, ReportExecutionService, SnapshotQueryService, UsuarioRelatorioAccessService],
 })
 export class ReportModule {}

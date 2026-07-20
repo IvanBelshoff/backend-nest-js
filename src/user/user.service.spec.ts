@@ -5,6 +5,9 @@ import {
   UsersService,
 } from './user.service';
 import { Usuario } from 'src/database/entities/Usuarios';
+import { Relatorio } from 'src/database/entities/Relatorios';
+import { UsuarioRelatorio } from 'src/database/entities/UsuarioRelatorio';
+import { Privacidade } from 'src/database/entities/privacidade.enum';
 
 describe('UsersService', () => {
   function createRefreshTokenServiceMock() {
@@ -681,6 +684,111 @@ describe('UsersService', () => {
 
       await expect(service.copyRolesAndPermissions(2, 3)).rejects.toThrow(
         BLOCKED_USER_SOURCE_MESSAGE,
+      );
+    });
+  });
+
+  describe('assignRelatorios', () => {
+    it('allows IA toggle when owner has public reports outside the grant list', async () => {
+      const usuarioRelatorioRepository = {
+        delete: jest.fn().mockResolvedValue(undefined),
+        insert: jest.fn().mockResolvedValue(undefined),
+      };
+      const transactionRelatorioRepository = {
+        find: jest.fn().mockImplementation(({ where }) => {
+          if (where.id) {
+            return Promise.resolve([
+              {
+                id: 5,
+                nome: 'Acessos de Usuários a Relatórios',
+                privacidade: Privacidade.PRIVAT,
+                id_proprietario: 1,
+              },
+              {
+                id: 9,
+                nome: 'Agendamentos e Próximas Execuções',
+                privacidade: Privacidade.PRIVAT,
+                id_proprietario: 1,
+              },
+            ]);
+          }
+
+          return Promise.resolve([
+            {
+              id: 5,
+              nome: 'Acessos de Usuários a Relatórios',
+              privacidade: Privacidade.PRIVAT,
+              id_proprietario: 1,
+            },
+            {
+              id: 9,
+              nome: 'Agendamentos e Próximas Execuções',
+              privacidade: Privacidade.PRIVAT,
+              id_proprietario: 1,
+            },
+          ]);
+        }),
+      };
+      const transactionUserRepository = {
+        findOne: jest.fn().mockResolvedValue({
+          id: 1,
+          nome: 'Admin',
+          sobrenome: 'Admin',
+          bloqueado: false,
+          usuarioRelatorios: [
+            { relatorioId: 5, permitirConhecimentoIa: true },
+            { relatorioId: 9, permitirConhecimentoIa: false },
+          ],
+        }),
+        save: jest.fn().mockResolvedValue(undefined),
+      };
+      const userRepository = {
+        manager: {
+          transaction: jest
+            .fn()
+            .mockImplementation((callback) =>
+              callback({
+                getRepository: (entity) => {
+                  if (entity === Usuario) {
+                    return transactionUserRepository;
+                  }
+                  if (entity === Relatorio) {
+                    return transactionRelatorioRepository;
+                  }
+                  if (entity === UsuarioRelatorio) {
+                    return usuarioRelatorioRepository;
+                  }
+                  return {};
+                },
+              }),
+            ),
+        },
+      };
+      const service = new UsersService(
+        userRepository as any,
+        {} as any,
+        {} as any,
+        {} as any,
+        {} as any,
+        {} as any,
+        createRefreshTokenServiceMock() as any,
+      );
+
+      await expect(
+        service.assignRelatorios(1, [{ id: 5 }, { id: 9 }]),
+      ).resolves.toBeUndefined();
+
+      expect(usuarioRelatorioRepository.insert).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({
+            relatorioId: 5,
+            permitirConhecimentoIa: true,
+          }),
+          expect.objectContaining({
+            relatorioId: 9,
+            permitirConhecimentoIa: false,
+          }),
+        ]),
       );
     });
   });

@@ -26,6 +26,10 @@ export const AUTH_ENDPOINT_MATRIX = {
       role: ['REGRA_USUARIO'],
       permission: ['PERMISSAO_CONCEDER_ACESSO_RELATORIO'],
     },
+    'PATCH /user/relatorios/:id/permitir-conhecimento-ia': {
+      role: ['REGRA_USUARIO'],
+      permission: ['PERMISSAO_CONCEDER_ACESSO_RELATORIO'],
+    },
     'PATCH /user/authentication/:id': { role: ['REGRA_ADMIN'] },
     'PATCH /user/password/:id': { self: true },
     'PATCH /user/:id': { permission: ['PERMISSAO_ATUALIZAR_USUARIO'] },
@@ -85,6 +89,9 @@ export const AUTH_ENDPOINT_MATRIX = {
     },
     'GET /relatorios/:id': { role: ['REGRA_RELATORIO'] },
     'PATCH /relatorios/users/:id': {
+      permission: ['PERMISSAO_CONCEDER_ACESSO_RELATORIO'],
+    },
+    'PATCH /relatorios/:id/permitir-conhecimento-ia': {
       permission: ['PERMISSAO_CONCEDER_ACESSO_RELATORIO'],
     },
     'PATCH /relatorios/:id': {

@@ -6,13 +6,13 @@ describe('AiAccessService', () => {
     findOne: jest.fn(),
   };
 
-  const usuarioRelatorioRepository = {
-    count: jest.fn(),
+  const reportService = {
+    countReportsWithAiKnowledge: jest.fn(),
   };
 
   const service = new AiAccessService(
     userRepository as any,
-    usuarioRelatorioRepository as any,
+    reportService as any,
   );
 
   beforeEach(() => {
@@ -55,15 +55,16 @@ describe('AiAccessService', () => {
       bloqueado: false,
       regra: [{ nome: 'REGRA_ADMIN' }],
     });
+    reportService.countReportsWithAiKnowledge.mockResolvedValue(9);
 
     const status = await service.getAccessStatus(3);
 
     expect(status).toEqual({
       eligible: true,
-      relatoriosDisponiveis: Number.MAX_SAFE_INTEGER,
+      relatoriosDisponiveis: 9,
       isAdmin: true,
     });
-    expect(usuarioRelatorioRepository.count).not.toHaveBeenCalled();
+    expect(reportService.countReportsWithAiKnowledge).toHaveBeenCalledWith(3);
   });
 
   it('requires at least one report with IA flag for non-admin users', async () => {
@@ -72,7 +73,7 @@ describe('AiAccessService', () => {
       bloqueado: false,
       regra: [{ nome: AI_ROLE_NAME }],
     });
-    usuarioRelatorioRepository.count.mockResolvedValue(0);
+    reportService.countReportsWithAiKnowledge.mockResolvedValue(0);
 
     const status = await service.getAccessStatus(4);
 
@@ -86,7 +87,7 @@ describe('AiAccessService', () => {
       bloqueado: false,
       regra: [{ nome: AI_ROLE_NAME }],
     });
-    usuarioRelatorioRepository.count.mockResolvedValue(2);
+    reportService.countReportsWithAiKnowledge.mockResolvedValue(2);
 
     const status = await service.getAccessStatus(5);
 
