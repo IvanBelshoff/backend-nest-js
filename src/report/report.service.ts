@@ -145,7 +145,10 @@ export class ReportService {
     userId: number,
     params: UserPrivateReportListParams,
   ): Promise<{ data: Relatorio[]; total: number; favoritos: number[] }> {
-    const user = await this.userRepository.findOne({ where: { id: userId } });
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      relations: { regra: true },
+    });
 
     if (!user) {
       throw new NotFoundException('Usuário não localizado');
@@ -176,7 +179,7 @@ export class ReportService {
     query.skip((params.page - 1) * params.limit).take(params.limit);
     const [data, total] = await query.getManyAndCount();
     const dataWithAiKnowledge = data.map((relatorio) =>
-      this.attachAiKnowledgeFlag(relatorio, userId),
+      this.attachAiKnowledgeFlag(relatorio, user),
     );
 
     return {
@@ -249,7 +252,17 @@ export class ReportService {
   async findPrivateById(id: number, userId: number): Promise<Relatorio> {
     const relatorio = await this.findAccessibleById(id, userId);
     this.assertNotExpired(relatorio);
-    return this.attachAiKnowledgeFlag(relatorio, userId);
+
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      relations: { regra: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Usuário não localizado');
+    }
+
+    return this.attachAiKnowledgeFlag(relatorio, user);
   }
 
   async findById(id: number, userId: number): Promise<Relatorio> {
@@ -621,17 +634,27 @@ export class ReportService {
 
   private attachAiKnowledgeFlag(
     relatorio: Relatorio,
-    userId: number,
+    user: Usuario,
   ): Relatorio & { permitir_conhecimento_ia: boolean } {
-    const grant = relatorio.usuarioRelatorios?.find(
-      (usuarioRelatorio) =>
-        Number(usuarioRelatorio.usuarioId) === Number(userId),
+    const userId = Number(user.id);
+    const isAdmin = (user.regra ?? []).some(
+      (regra) => regra.nome === 'REGRA_ADMIN',
     );
 
-    return {
+    const grant = relatorio.usuarioRelatorios?.find(
+      (usuarioRelatorio) =>
+        Number(usuarioRelatorio.usuarioId) === userId,
+    );
+
+    const permitir_conhecimento_ia =
+      isAdmin || (grant?.permitirConhecimentoIa ?? false);
+
+    const result = {
       ...relatorio,
-      permitir_conhecimento_ia: grant?.permitirConhecimentoIa ?? false,
+      permitir_conhecimento_ia,
     };
+
+    return result;
   }
 
   private baseQuery(): SelectQueryBuilder<Relatorio> {

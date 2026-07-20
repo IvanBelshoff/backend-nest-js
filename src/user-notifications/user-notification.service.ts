@@ -14,14 +14,20 @@ import {
   UserNotification,
   UserNotificationType,
 } from 'src/database/entities/UserNotification';
+import { ReportJobService } from 'src/report/jobs/report-job.service';
 import type { ListUserNotificationsQueryDto } from './dto/list-user-notifications-query.dto';
+import type { UserNotificationPayloadDto } from './dto/user-notification-payload.dto';
+import {
+  buildNotificationContent,
+  buildNotificationPayload,
+} from './user-notification-content';
 
 export type UserNotificationItem = {
   id: string;
   type: UserNotificationType;
   title: string;
   body: string;
-  payload: Record<string, unknown>;
+  payload: UserNotificationPayloadDto;
   readAt: Date | null;
   createdAt: Date;
 };
@@ -38,6 +44,7 @@ export class UserNotificationService {
   constructor(
     @InjectRepository(UserNotification)
     private readonly notificationRepository: Repository<UserNotification>,
+    private readonly reportJobService: ReportJobService,
   ) {}
 
   async createFromJob(
@@ -59,26 +66,21 @@ export class UserNotificationService {
       job.tipo === RelatorioJobTipo.EXPORT_CSV &&
       job.status === RelatorioJobStatus.COMPLETED &&
       Boolean(job.resultPath);
+    const origem = await this.reportJobService.resolveJobOrigem(job.id);
 
-    const { type, title, body } = this.resolveNotificationContent(
-      job,
-      relatorioNome,
-    );
+    const { type, title, body } = buildNotificationContent(job, relatorioNome);
 
     const notification = this.notificationRepository.create({
       userId: job.userId,
       type,
       title,
       body,
-      payload: {
-        jobId: job.id,
-        relatorioId: Number(job.relatorioId),
+      payload: buildNotificationPayload(
+        job,
         relatorioNome,
         downloadAvailable,
-        errorMessage: job.errorMessage,
-        jobTipo: job.tipo,
-        jobStatus: job.status,
-      },
+        origem,
+      ),
       readAt: null,
     });
 
@@ -147,52 +149,13 @@ export class UserNotificationService {
       .execute();
   }
 
-  private resolveNotificationContent(
-    job: RelatorioJob,
-    relatorioNome: string,
-  ): { type: UserNotificationType; title: string; body: string } {
-    if (job.tipo === RelatorioJobTipo.EXPORT_CSV) {
-      if (job.status === RelatorioJobStatus.COMPLETED) {
-        return {
-          type: UserNotificationType.EXPORT_READY,
-          title: 'Exportação concluída',
-          body: `O CSV do relatório "${relatorioNome}" está pronto para download.`,
-        };
-      }
-
-      return {
-        type: UserNotificationType.EXPORT_FAILED,
-        title: 'Falha na exportação',
-        body:
-          job.errorMessage ??
-          `Não foi possível exportar o relatório "${relatorioNome}".`,
-      };
-    }
-
-    if (job.status === RelatorioJobStatus.COMPLETED) {
-      return {
-        type: UserNotificationType.SNAPSHOT_READY,
-        title: 'Snapshot atualizado',
-        body: `O snapshot do relatório "${relatorioNome}" foi atualizado.`,
-      };
-    }
-
-    return {
-      type: UserNotificationType.SNAPSHOT_FAILED,
-      title: 'Falha no snapshot',
-      body:
-        job.errorMessage ??
-        `Não foi possível atualizar o snapshot do relatório "${relatorioNome}".`,
-    };
-  }
-
   private toItem(notification: UserNotification): UserNotificationItem {
     return {
       id: notification.id,
       type: notification.type,
       title: notification.title,
       body: notification.body,
-      payload: notification.payload ?? {},
+      payload: (notification.payload ?? {}) as UserNotificationPayloadDto,
       readAt: notification.readAt,
       createdAt: notification.createdAt,
     };

@@ -286,6 +286,11 @@ export class ReportJobService {
     });
   }
 
+  async resolveJobOrigem(jobId: string): Promise<'manual' | 'agendado'> {
+    const scheduledJobIds = await this.loadScheduledJobIds([jobId]);
+    return scheduledJobIds.has(jobId) ? 'agendado' : 'manual';
+  }
+
   private async loadScheduledJobIds(jobIds: string[]): Promise<Set<string>> {
     const scheduledJobIds = new Set<string>();
 
