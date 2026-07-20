@@ -2,9 +2,9 @@
   "name": "backend-nest-js",
   "version": "0.0.1",
   "description": "",
-  "author": "",
+  "author": "Ivan Belshoff <ivanbelshoff@gmail.com>",
   "private": true,
-  "license": "UNLICENSED",
+  "license": "",
   "scripts": {
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
@@ -23,6 +23,8 @@
     "migration:revert": "typeorm-ts-node-commonjs -d ./src/database/data-source.ts migration:revert"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^4.0.16",
+    "@ai-sdk/google": "^4.0.18",
     "@ai-sdk/openai": "^4.0.16",
     "@duckdb/node-api": "^1.5.4-r.1",
     "@nestjs/common": "^11.0.1",

@@ -1,18 +1,27 @@
 jest.mock('ai-sdk-ollama', () => ({
-  createOllama: jest.fn(() => jest.fn()),
+  createOllama: jest.fn(() => jest.fn(() => 'ollama-model')),
 }));
 
 jest.mock('@ai-sdk/openai', () => ({
   createOpenAI: jest.fn(() => ({
-    chat: jest.fn(),
+    chat: jest.fn(() => 'openai-model'),
   })),
+}));
+
+jest.mock('@ai-sdk/anthropic', () => ({
+  createAnthropic: jest.fn(() => jest.fn(() => 'anthropic-model')),
+}));
+
+jest.mock('@ai-sdk/google', () => ({
+  createGoogleGenerativeAI: jest.fn(() => jest.fn(() => 'google-model')),
 }));
 
 jest.mock('src/shared/env.schema', () => ({
   env: {
-    OLLAMA_BASE_URL: 'http://localhost:11434',
-    OLLAMA_MODEL: 'qwen3.5:4b',
-    API_KEY: undefined,
+    AI_PROVIDER: 'ollama',
+    AI_BASE_URL: 'http://localhost:11434',
+    AI_MODEL: 'qwen3.5:4b',
+    AI_API_KEY: undefined,
   },
 }));
 
@@ -27,7 +36,7 @@ describe('AiService', () => {
     jest.restoreAllMocks();
   });
 
-  it('returns available when service responds and configured model is listed', async () => {
+  it('returns available when Ollama responds and configured model is listed', async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ models: [{ name: 'qwen3.5:4b' }] }),
@@ -36,6 +45,7 @@ describe('AiService', () => {
     const result = await service.checkHealth();
 
     expect(result.available).toBe(true);
+    expect(result.provider).toBe('ollama');
     expect(result.model).toBe('qwen3.5:4b');
     expect(result.latencyMs).toBeGreaterThanOrEqual(0);
     expect(result.error).toBeUndefined();
@@ -76,5 +86,9 @@ describe('AiService', () => {
 
     expect(result.available).toBe(false);
     expect(result.error).toBe('ECONNREFUSED');
+  });
+
+  it('returns chat model from provider adapter', () => {
+    expect(service.getChatModel()).toBe('ollama-model');
   });
 });
