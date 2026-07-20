@@ -175,8 +175,15 @@ export class ReportService {
 
     query.skip((params.page - 1) * params.limit).take(params.limit);
     const [data, total] = await query.getManyAndCount();
+    const dataWithAiKnowledge = data.map((relatorio) =>
+      this.attachAiKnowledgeFlag(relatorio, userId),
+    );
 
-    return { data, total, favoritos: user.relatorios_favoritos ?? [] };
+    return {
+      data: dataWithAiKnowledge,
+      total,
+      favoritos: user.relatorios_favoritos ?? [],
+    };
   }
 
   async findAllPublic(
@@ -242,7 +249,7 @@ export class ReportService {
   async findPrivateById(id: number, userId: number): Promise<Relatorio> {
     const relatorio = await this.findAccessibleById(id, userId);
     this.assertNotExpired(relatorio);
-    return relatorio;
+    return this.attachAiKnowledgeFlag(relatorio, userId);
   }
 
   async findById(id: number, userId: number): Promise<Relatorio> {
@@ -610,6 +617,21 @@ export class ReportService {
     }
 
     return relatorio;
+  }
+
+  private attachAiKnowledgeFlag(
+    relatorio: Relatorio,
+    userId: number,
+  ): Relatorio & { permitir_conhecimento_ia: boolean } {
+    const grant = relatorio.usuarioRelatorios?.find(
+      (usuarioRelatorio) =>
+        Number(usuarioRelatorio.usuarioId) === Number(userId),
+    );
+
+    return {
+      ...relatorio,
+      permitir_conhecimento_ia: grant?.permitirConhecimentoIa ?? false,
+    };
   }
 
   private baseQuery(): SelectQueryBuilder<Relatorio> {
