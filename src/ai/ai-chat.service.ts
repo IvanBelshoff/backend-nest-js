@@ -22,28 +22,145 @@ import { AiThreadTitleService } from './ai-thread-title.service';
 import { extractTextFromUIMessage } from './ai-thread-title.util';
 import type { AiMentionDto } from './dto/ai-chat.dto';
 
-/** Detecta tool-call vazado como texto (comum em modelos Ollama pequenos). */
+/** Detecta tool-call vazado como texto (comum em modelos Ollama / Nemotron). */
 function looksLikeLeakedToolCallJson(text: string): boolean {
   const trimmed = text.trim();
-  if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) {
+  if (!trimmed) {
     return false;
   }
-  try {
-    const parsed = JSON.parse(trimmed) as {
-      name?: unknown;
-      arguments?: unknown;
-    };
-    return typeof parsed.name === 'string' && parsed.arguments != null;
-  } catch {
-    return false;
+
+  if (/<tool_call>|<\/?function=/i.test(trimmed)) {
+    return true;
   }
+
+  const tryParse = (raw: string): unknown => {
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  };
+
+  const isToolShape = (value: unknown): boolean => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return false;
+    }
+    const record = value as Record<string, unknown>;
+    const nameOrType =
+      typeof record.name === 'string'
+        ? record.name
+        : typeof record.type === 'string'
+          ? record.type
+          : null;
+    return nameOrType != null && 'arguments' in record;
+  };
+
+  const parsed = tryParse(trimmed);
+  if (isToolShape(parsed)) {
+    return true;
+  }
+  if (Array.isArray(parsed) && parsed.length > 0 && parsed.every(isToolShape)) {
+    return true;
+  }
+
+  return false;
 }
 
 function sanitizeAssistantText(text: string): string {
   if (looksLikeLeakedToolCallJson(text)) {
     return 'Não consegui formatar a resposta. Tente perguntar de novo ou use Nova conversa.';
   }
-  return text;
+  return redactInternalLeakageInText(redactToolNamesInText(text));
+}
+
+const KNOWN_TOOL_NAMES = [
+  'listarRelatoriosDisponiveis',
+  'descreverRelatorio',
+  'consultarRelatorio',
+  'listarUsuariosSistema',
+  'relacionarAcessosUsuarios',
+  'obterUsuarioSistema',
+  'listarRelatoriosSistema',
+  'listarDashboardsSistema',
+  'obterDashboardSistema',
+  'obterMetricasSistema',
+  'obterHistoricoMetricas',
+  'listarJobsSistema',
+  'listarExecucoesAgendamento',
+] as const;
+
+const KNOWN_TOOL_NAME_PATTERN = new RegExp(
+  `\\b(${KNOWN_TOOL_NAMES.join('|')})\\b`,
+  'g',
+);
+
+function redactToolNamesInText(text: string): string {
+  // Importante: NÃO usar trim()/collapse de whitespace aqui.
+  // No stream, cada delta é um pedaço (às vezes só " "); trim apaga espaços entre palavras.
+  return text
+    .replace(KNOWN_TOOL_NAME_PATTERN, 'consulta autorizada')
+    .replace(/`consulta autorizada`/g, 'consulta autorizada');
+}
+
+/** Remove vazamentos de parâmetros/campos internos (ex.: bloqueado=false) da resposta ao usuário. */
+function redactInternalLeakageInText(text: string, options?: { collapseWhitespace?: boolean }): string {
+  let next = text
+    .replace(/\s*\([^)]*bloqueado\s*=\s*(true|false)[^)]*\)/gi, '')
+    .replace(/`bloqueado\s*=\s*(true|false)`/gi, '')
+    .replace(/\bbloqueado\s*=\s*(true|false)\b/gi, '');
+
+  if (options?.collapseWhitespace !== false) {
+    next = next
+      .replace(/[ \t]{2,}/g, ' ')
+      .replace(/ +\n/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .replace(/ +\./g, '.');
+  }
+
+  return next;
+}
+
+function asksCapabilityQuestion(text: string): boolean {
+  return /o\s*que\s+(voc[eê]|vc)\s+pode|o\s*que\s+consegue|suas?\s+capacidades|o\s*que\s+sabe\s+fazer|como\s+pode\s+ajudar|oque\s+voc[eê]\s+pode/i.test(
+    text,
+  );
+}
+
+function redactToolNamesFromUiMessageStream<T extends Record<string, unknown>>(
+  stream: ReadableStream<T>,
+): ReadableStream<T> {
+  return stream.pipeThrough(
+    new TransformStream<T, T>({
+      transform(chunk, controller) {
+        if (!chunk || typeof chunk !== 'object') {
+          controller.enqueue(chunk);
+          return;
+        }
+
+        if (typeof chunk.delta === 'string') {
+          controller.enqueue({
+            ...chunk,
+            delta: redactInternalLeakageInText(redactToolNamesInText(chunk.delta), {
+              collapseWhitespace: false,
+            }),
+          });
+          return;
+        }
+
+        if (typeof chunk.text === 'string') {
+          controller.enqueue({
+            ...chunk,
+            text: redactInternalLeakageInText(redactToolNamesInText(chunk.text), {
+              collapseWhitespace: false,
+            }),
+          });
+          return;
+        }
+
+        controller.enqueue(chunk);
+      },
+    }),
+  );
 }
 
 @Injectable()
@@ -97,6 +214,7 @@ export class AiChatService {
       : '';
 
     const isAdmin = await this.aiAccessService.isAdmin(userId);
+    const canManageUsers = await this.aiAccessService.canMentionUsers(userId);
     const reportCatalog =
       await this.aiReportToolsService.getReportCatalogForPrompt(userId);
     const mentionsSection =
@@ -114,54 +232,11 @@ export class AiChatService {
       mentionUserPrefix,
     );
 
-    // #region agent log
-    {
-      const fs = await import('node:fs');
-      const lastForModel = messagesForModel.at(-1);
-      const lastText =
-        lastForModel?.role === 'user'
-          ? extractTextFromUIMessage(lastForModel).slice(0, 300)
-          : '';
-      const line = JSON.stringify({
-        sessionId: '07dd47',
-        runId: 'post-fix',
-        hypothesisId: 'A',
-        location: 'ai-chat.service.ts:streamChat',
-        message: 'reports domain routing context',
-        data: {
-          isAdmin,
-          catalogCount: reportCatalog.length,
-          validatedMentions: validatedMentions.map((m) => ({
-            type: m.type,
-            id: m.id ?? null,
-            label: m.label,
-          })),
-          reportsDomainMention: validatedMentions.some(
-            (m) => m.type === 'dominio_relatorios',
-          ),
-          prefixHasTotal: mentionUserPrefix.includes('total='),
-          prefixPreview: mentionUserPrefix.slice(0, 280),
-          mentionsSectionPreview: mentionsSection.slice(0, 280),
-          lastUserMessagePreview: lastText,
-          asksHowManyReports:
-            /quantos?\s+relat[oó]rios/i.test(lastText) ||
-            /relat[oó]rios\s+existem/i.test(lastText),
-        },
-        timestamp: Date.now(),
-      });
-      try {
-        fs.appendFileSync(
-          '/Users/ivanbelshoff/Desktop/Projetos Pessoais/NewDataDash/.cursor/debug-07dd47.log',
-          `${line}\n`,
-        );
-      } catch {
-        /* ignore */
-      }
-    }
-    // #endregion
-
     const tools = {
       ...this.buildReportTools(userId),
+      ...(canManageUsers && !isAdmin
+        ? this.buildUserManagementTools(userId)
+        : {}),
       ...(isAdmin ? this.buildAdminTools(userId) : {}),
     };
 
@@ -172,6 +247,19 @@ export class AiChatService {
     if (truncatedTitle) {
       responseHeaders['X-Thread-Title'] = truncatedTitle;
     }
+
+    const lastUserPlain = lastMessage?.role === 'user'
+      ? extractTextFromUIMessage(lastMessage)
+      : '';
+    const asksCapabilities = asksCapabilityQuestion(lastUserPlain);
+    const asksRelation =
+      /rela[cç][aã]o|cruzar|cruzamento|possuem|possuem|que\s+t[eê]m|que\s+possuem/i.test(
+        lastUserPlain,
+      );
+    const asksCountOnly =
+      /quantos?\s+/i.test(lastUserPlain) &&
+      !asksRelation &&
+      !/privad|ativ|lista|relacione|crie/i.test(lastUserPlain);
 
     const dashboardMentionWithFacts = validatedMentions.some(
       (m) => m.type === 'dashboard' && mentionUserPrefix.includes('data_criacao='),
@@ -185,113 +273,37 @@ export class AiChatService {
         m.type === 'dominio_relatorios' && mentionUserPrefix.includes('total='),
     );
     const preferMentionFactsOnly =
-      dashboardMentionWithFacts ||
-      usersDomainWithFacts ||
-      reportsDomainWithFacts;
-    const availableToolNames = Object.keys(tools);
+      asksCapabilities ||
+      (!asksRelation &&
+        (dashboardMentionWithFacts ||
+          ((usersDomainWithFacts || reportsDomainWithFacts) && asksCountOnly)));
+
+    const capabilityPrefix = asksCapabilities
+      ? isAdmin
+        ? '[Instrução de segurança] O usuário perguntou o que você pode fazer. Responda em português do Brasil, em linguagem de negócio (relatórios, dashboards, usuários, métricas, jobs). PROIBIDO citar nomes técnicos de funções/tools (camelCase), identificadores internos ou parâmetros de API. Não invente capacidades.'
+        : canManageUsers
+          ? '[Instrução de segurança] O usuário perguntou o que você pode fazer. Responda em português do Brasil descrevendo: consultar/listar/interpretar relatórios autorizados e listar/consultar usuários do sistema. PROIBIDO mencionar métricas globais, jobs ou infraestrutura. PROIBIDO citar nomes técnicos de funções/tools. Não invente capacidades.'
+          : '[Instrução de segurança] O usuário perguntou o que você pode fazer. Responda em português do Brasil descrevendo APENAS: consultar/listar/interpretar os relatórios autorizados no catálogo. PROIBIDO mencionar usuários do sistema, métricas globais, jobs, infraestrutura ou qualquer capacidade administrativa. PROIBIDO citar nomes técnicos de funções/tools. Não invente capacidades.'
+      : '';
+    const messagesForCapabilities = this.withMentionPrefixOnLastUserMessage(
+      messagesForModel,
+      capabilityPrefix,
+    );
 
     const result = streamText({
       model: this.aiService.getChatModel(),
       system: this.aiChatPersistenceService.buildSystemPrompt(
         params.user,
         reportCatalog,
-        { isAdmin, mentionsSection },
+        { isAdmin, canManageUsers, mentionsSection },
       ),
-      messages: await convertToModelMessages(messagesForModel),
+      messages: await convertToModelMessages(messagesForCapabilities),
       tools,
       // Modelos pequenos (Ollama) frequentemente escrevem tool-calls como texto JSON
       // ou alucinam contagens (ex.: limit=50). Com metadados já no prompt, desliga tools.
       ...(preferMentionFactsOnly ? { toolChoice: 'none' as const } : {}),
       stopWhen: stepCountIs(env.AI_MAX_STEPS),
-      onStepFinish: async (step) => {
-        // #region agent log
-        {
-          const fs = await import('node:fs');
-          const toolCalls = (step.toolCalls ?? [])
-            .filter((tc): tc is NonNullable<typeof tc> => tc != null)
-            .map((tc) => ({
-              toolName: 'toolName' in tc ? tc.toolName : null,
-              type: tc.type,
-            }));
-          const line = JSON.stringify({
-            sessionId: '07dd47',
-            runId: 'post-fix',
-            hypothesisId: 'B',
-            location: 'ai-chat.service.ts:onStepFinish',
-            message: 'model step finished',
-            data: {
-              finishReason: step.finishReason,
-              toolCallCount: toolCalls.length,
-              toolCalls,
-              textPreview: (step.text ?? '').slice(0, 200),
-            },
-            timestamp: Date.now(),
-          });
-          try {
-            fs.appendFileSync(
-              '/Users/ivanbelshoff/Desktop/Projetos Pessoais/NewDataDash/.cursor/debug-07dd47.log',
-              `${line}\n`,
-            );
-          } catch {
-            /* ignore */
-          }
-        }
-        // #endregion
-      },
-      onFinish: async ({ text, steps }) => {
-        // #region agent log
-        {
-          const fs = await import('node:fs');
-          const trimmed = (text ?? '').trim();
-          const allToolNames = (steps ?? []).flatMap((s) =>
-            (s.toolCalls ?? [])
-              .filter((tc): tc is NonNullable<typeof tc> => tc != null)
-              .map((tc) =>
-                'toolName' in tc ? String(tc.toolName) : 'unknown',
-              ),
-          );
-          const line = JSON.stringify({
-            sessionId: '07dd47',
-            runId: 'post-fix',
-            hypothesisId: 'B',
-            location: 'ai-chat.service.ts:onFinish',
-            message: 'assistant finish with tool usage',
-            data: {
-              textLength: trimmed.length,
-              textPreview: trimmed.slice(0, 280),
-              looksLikeToolJson: looksLikeLeakedToolCallJson(trimmed),
-              sanitizedWouldTrigger: looksLikeLeakedToolCallJson(trimmed),
-              toolChoiceNone: preferMentionFactsOnly,
-              reportsDomainWithFacts,
-              catalogTotalInPrompt: reportCatalog.length,
-              availableToolNames,
-              calledToolNames: allToolNames,
-              calledListarDisponiveis: allToolNames.includes(
-                'listarRelatoriosDisponiveis',
-              ),
-              calledListarSistema: allToolNames.includes(
-                'listarRelatoriosSistema',
-              ),
-              calledNoTools: allToolNames.length === 0,
-              asksToConsultDb:
-                /consultar|banco de dados|gostaria que eu/i.test(trimmed),
-              answersWithCatalogTotal: new RegExp(
-                `\\b${reportCatalog.length}\\b`,
-              ).test(trimmed),
-            },
-            timestamp: Date.now(),
-          });
-          try {
-            fs.appendFileSync(
-              '/Users/ivanbelshoff/Desktop/Projetos Pessoais/NewDataDash/.cursor/debug-07dd47.log',
-              `${line}\n`,
-            );
-          } catch {
-            /* ignore */
-          }
-        }
-        // #endregion
-
+      onFinish: async ({ text }) => {
         const shouldRefineTitle =
           await this.aiChatPersistenceService.canRefineTitle(thread.id);
 
@@ -316,9 +328,12 @@ export class AiChatService {
       },
     });
 
+    const uiStream = toUIMessageStream({ stream: result.stream });
+    const redactedStream = redactToolNamesFromUiMessageStream(uiStream);
+
     pipeUIMessageStreamToResponse({
       response: params.res,
-      stream: toUIMessageStream({ stream: result.stream }),
+      stream: redactedStream,
       headers: responseHeaders,
     });
 
@@ -378,41 +393,8 @@ export class AiChatService {
         description:
           'Lista relatórios autorizados e a contagem. Retorna { total, relatorios (nomes), referenciaInterna }. Use o campo total para "quantos relatórios". Não verbalize IDs/estado ao usuário.',
         inputSchema: z.object({}),
-        execute: async () => {
-          const result =
-            await this.aiReportToolsService.listAvailableReports(userId);
-          // #region agent log
-          {
-            const fs = await import('node:fs');
-            const line = JSON.stringify({
-              sessionId: '07dd47',
-              runId: 'post-fix',
-              hypothesisId: 'C',
-              location: 'ai-chat.service.ts:listarRelatoriosDisponiveis',
-              message: 'list available reports tool executed',
-              data: {
-                executed: true,
-                count: result.relatorios?.length ?? 0,
-                resultTotal: result.total,
-                hasTotalField: Object.prototype.hasOwnProperty.call(
-                  result,
-                  'total',
-                ),
-              },
-              timestamp: Date.now(),
-            });
-            try {
-              fs.appendFileSync(
-                '/Users/ivanbelshoff/Desktop/Projetos Pessoais/NewDataDash/.cursor/debug-07dd47.log',
-                `${line}\n`,
-              );
-            } catch {
-              /* ignore */
-            }
-          }
-          // #endregion
-          return result;
-        },
+        execute: async () =>
+          this.aiReportToolsService.listAvailableReports(userId),
       }),
       descreverRelatorio: tool({
         description:
@@ -440,59 +422,51 @@ export class AiChatService {
     };
   }
 
-  private buildAdminTools(userId: number) {
+  private buildUserManagementTools(userId: number) {
     return {
       listarUsuariosSistema: tool({
         description:
-          'Lista usuários do sistema (admin). Retorna { total, usuarios }. Use o campo total como quantidade real. O parâmetro limit é só tamanho de página (padrão 50) e NÃO é o total de usuários. Use filter com nome ou e-mail. Não retorna preferências de UI.',
+          'Lista usuários do sistema (requer REGRA_USUARIO ou admin). Retorna { total, usuarios }. Use o campo total como quantidade real. O parâmetro limit é só tamanho de página (padrão 50) e NÃO é o total de usuários. Use filter com nome ou e-mail. Para contar apenas usuários ativos, filtre os não bloqueados via o argumento booleano correspondente — NUNCA explique esse argumento ao usuário; diga apenas "usuários ativos". Não retorna preferências de UI.',
         inputSchema: z.object({
           page: z.number().int().positive().optional(),
           limit: z.number().int().positive().max(100).optional(),
           filter: z.string().optional(),
+          bloqueado: z
+            .boolean()
+            .optional()
+            .describe(
+              'Filtro interno: false = só ativos, true = só bloqueados. Nunca mencione este nome ao usuário.',
+            ),
         }),
-        execute: async (params) => {
-          const result = await this.aiAdminToolsService.listUsers(
-            userId,
-            params,
-          );
-          // #region agent log
-          {
-            const fs = await import('node:fs');
-            const line = JSON.stringify({
-              sessionId: 'dcbb51',
-              runId: 'post-fix-4',
-              hypothesisId: 'J',
-              location: 'ai-chat.service.ts:listarUsuariosSistema',
-              message: 'list users tool executed',
-              data: {
-                executed: true,
-                requestedLimit: params.limit ?? null,
-                resultTotal: result.total,
-                resultCount: result.usuarios.length,
-              },
-              timestamp: Date.now(),
-            });
-            try {
-              fs.appendFileSync(
-                '/Users/ivanbelshoff/Desktop/Projetos Pessoais/NewDataDash/.cursor/debug-dcbb51.log',
-                `${line}\n`,
-              );
-            } catch {
-              /* ignore */
-            }
-          }
-          // #endregion
-          return result;
-        },
+        execute: async (params) =>
+          this.aiAdminToolsService.listUsers(userId, params),
       }),
       obterUsuarioSistema: tool({
         description:
-          'Obtém acesso efetivo de um usuário por ID (admin). Retorna regras RBAC, permissões, relatoriosPrivadosComAcesso, dashboardsPrivadosComAcesso (concessão explícita), relatoriosPublicosAcessiveis e dashboardsPublicosAcessiveis. Não inclui itens disponíveis sem concessão.',
+          'Obtém acesso efetivo de um usuário por ID (requer REGRA_USUARIO ou admin). Retorna regras RBAC, permissões, relatoriosPrivadosComAcesso, dashboardsPrivadosComAcesso (concessão explícita), relatoriosPublicosAcessiveis e dashboardsPublicosAcessiveis. Não inclui itens disponíveis sem concessão.',
         inputSchema: z.object({
           usuarioId: z.number().int().positive(),
         }),
         execute: async ({ usuarioId }) =>
           this.aiAdminToolsService.getUser(userId, usuarioId),
+      }),
+    };
+  }
+
+  private buildAdminTools(userId: number) {
+    return {
+      ...this.buildUserManagementTools(userId),
+      relacionarAcessosUsuarios: tool({
+        description:
+          'Relaciona usuários com dashboards/relatórios privados (admin). Retorna: relatoriosPrivadosNoSistema (catálogo de TODOS os relatórios privados + quem tem acesso), dashboardsPrivadosNoSistemaTotal, e relacoes por usuário. SEMPRE apresente primeiro o catálogo de relatórios privados; depois a relação por usuário. Prefira esta tool em vez de N chamadas a obterUsuarioSistema.',
+        inputSchema: z.object({
+          somenteAtivos: z.boolean().optional(),
+          exigirDashboardsPrivados: z.boolean().optional(),
+          exigirRelatoriosPrivados: z.boolean().optional(),
+          limit: z.number().int().positive().max(100).optional(),
+        }),
+        execute: async (params) =>
+          this.aiAdminToolsService.relateUsersPrivateAccess(userId, params),
       }),
       listarRelatoriosSistema: tool({
         description:
@@ -502,39 +476,8 @@ export class AiChatService {
           limit: z.number().int().positive().max(100).optional(),
           nome: z.string().optional(),
         }),
-        execute: async (params) => {
-          const result = await this.aiAdminToolsService.listReports(
-            userId,
-            params,
-          );
-          // #region agent log
-          {
-            const fs = await import('node:fs');
-            const line = JSON.stringify({
-              sessionId: '07dd47',
-              runId: 'post-fix',
-              hypothesisId: 'D',
-              location: 'ai-chat.service.ts:listarRelatoriosSistema',
-              message: 'list system reports tool executed',
-              data: {
-                executed: true,
-                resultTotal: result.total,
-                pageCount: result.relatorios?.length ?? 0,
-              },
-              timestamp: Date.now(),
-            });
-            try {
-              fs.appendFileSync(
-                '/Users/ivanbelshoff/Desktop/Projetos Pessoais/NewDataDash/.cursor/debug-07dd47.log',
-                `${line}\n`,
-              );
-            } catch {
-              /* ignore */
-            }
-          }
-          // #endregion
-          return result;
-        },
+        execute: async (params) =>
+          this.aiAdminToolsService.listReports(userId, params),
       }),
       listarDashboardsSistema: tool({
         description:
@@ -544,42 +487,8 @@ export class AiChatService {
           limit: z.number().int().positive().max(100).optional(),
           nome: z.string().optional(),
         }),
-        execute: async (params) => {
-          const result = await this.aiAdminToolsService.listDashboards(
-            userId,
-            params,
-          );
-          // #region agent log
-          {
-            const fs = await import('node:fs');
-            const sample = result.dashboards?.[0];
-            const line = JSON.stringify({
-              sessionId: 'dcbb51',
-              runId: 'post-fix',
-              hypothesisId: 'C',
-              location: 'ai-chat.service.ts:listarDashboardsSistema',
-              message: 'dashboard list tool result shape',
-              data: {
-                total: result.total,
-                sampleKeys: sample ? Object.keys(sample) : [],
-                sampleHasDataCriacao: sample
-                  ? Object.prototype.hasOwnProperty.call(sample, 'data_criacao')
-                  : false,
-              },
-              timestamp: Date.now(),
-            });
-            try {
-              fs.appendFileSync(
-                '/Users/ivanbelshoff/Desktop/Projetos Pessoais/NewDataDash/.cursor/debug-dcbb51.log',
-                `${line}\n`,
-              );
-            } catch {
-              /* ignore */
-            }
-          }
-          // #endregion
-          return result;
-        },
+        execute: async (params) =>
+          this.aiAdminToolsService.listDashboards(userId, params),
       }),
       obterDashboardSistema: tool({
         description:
@@ -587,31 +496,8 @@ export class AiChatService {
         inputSchema: z.object({
           dashboardId: z.number().int().positive(),
         }),
-        execute: async ({ dashboardId }) => {
-          // #region agent log
-          {
-            const fs = await import('node:fs');
-            const line = JSON.stringify({
-              sessionId: 'dcbb51',
-              runId: 'post-fix-3',
-              hypothesisId: 'G',
-              location: 'ai-chat.service.ts:obterDashboardSistema',
-              message: 'dashboard detail tool executed',
-              data: { dashboardId, executed: true },
-              timestamp: Date.now(),
-            });
-            try {
-              fs.appendFileSync(
-                '/Users/ivanbelshoff/Desktop/Projetos Pessoais/NewDataDash/.cursor/debug-dcbb51.log',
-                `${line}\n`,
-              );
-            } catch {
-              /* ignore */
-            }
-          }
-          // #endregion
-          return this.aiAdminToolsService.getDashboard(userId, dashboardId);
-        },
+        execute: async ({ dashboardId }) =>
+          this.aiAdminToolsService.getDashboard(userId, dashboardId),
       }),
       obterMetricasSistema: tool({
         description:

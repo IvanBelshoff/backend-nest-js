@@ -79,14 +79,20 @@ export class AiAdminToolsService {
 
   async listUsers(
     userId: number,
-    params: { page?: number; limit?: number; filter?: string } = {},
+    params: {
+      page?: number;
+      limit?: number;
+      filter?: string;
+      bloqueado?: boolean;
+    } = {},
   ): Promise<{ total: number; usuarios: AiAdminUserSummary[] }> {
-    await this.assertAdmin(userId);
+    await this.assertCanManageUsers(userId);
 
     const { data, total } = await this.usersService.findAllPaginated({
       page: params.page ?? 1,
       limit: params.limit ?? 50,
       filter: params.filter,
+      bloqueado: params.bloqueado,
     });
 
     return {
@@ -95,11 +101,159 @@ export class AiAdminToolsService {
     };
   }
 
+  /**
+   * Relaciona usuários com dashboards/relatórios privados concedidos.
+   * Uma única chamada evita N× obterUsuarioSistema (limitado por AI_MAX_STEPS).
+   */
+  async relateUsersPrivateAccess(
+    userId: number,
+    params: {
+      somenteAtivos?: boolean;
+      exigirDashboardsPrivados?: boolean;
+      exigirRelatoriosPrivados?: boolean;
+      limit?: number;
+    } = {},
+  ): Promise<{
+    total: number;
+    relatoriosPrivadosNoSistema: Array<{
+      id: number;
+      nome: string;
+      usuariosComAcesso: string[];
+    }>;
+    dashboardsPrivadosNoSistemaTotal: number;
+    relacoes: Array<{
+      usuario: {
+        id: number;
+        nome: string;
+        sobrenome: string;
+        email: string;
+        bloqueado: boolean;
+      };
+      dashboardsPrivados: Array<{ id: number; nome: string }>;
+      relatoriosPrivados: Array<{ id: number; nome: string }>;
+    }>;
+  }> {
+    await this.assertAdmin(userId);
+
+    const somenteAtivos = params.somenteAtivos ?? true;
+    const exigirDashboardsPrivados = params.exigirDashboardsPrivados ?? true;
+    const exigirRelatoriosPrivados = params.exigirRelatoriosPrivados ?? true;
+    const limit = Math.min(Math.max(params.limit ?? 50, 1), 100);
+
+    const [
+      { data: users },
+      privateReportsPage,
+      privateDashboardsPage,
+    ] = await Promise.all([
+      this.usersService.findAllPaginated({
+        page: 1,
+        limit,
+        bloqueado: somenteAtivos ? false : undefined,
+      }),
+      this.reportService.findAllPaginated({
+        page: 1,
+        limit: 100,
+        privacidade: 'privado',
+      }),
+      this.dashboardService.findAllPaginated({
+        page: 1,
+        limit: 100,
+        privacidade: 'privado',
+      }),
+    ]);
+
+    const relacoes: Array<{
+      usuario: {
+        id: number;
+        nome: string;
+        sobrenome: string;
+        email: string;
+        bloqueado: boolean;
+      };
+      dashboardsPrivados: Array<{ id: number; nome: string }>;
+      relatoriosPrivados: Array<{ id: number; nome: string }>;
+    }> = [];
+
+    const reportAccessIndex = new Map<number, string[]>();
+
+    for (const user of users) {
+      const targetId = Number(user.id);
+      const [privateDashboardAccess, privateReportAccess] = await Promise.all([
+        this.dashboardService.getDashboardsByUser(targetId),
+        this.reportService.getRelatoriosByUser(targetId),
+      ]);
+
+      const dashboardsPrivados = privateDashboardAccess.dashboards.map(
+        (dashboard) => ({
+          id: Number(dashboard.id),
+          nome: dashboard.nome,
+        }),
+      );
+      const relatoriosPrivados = privateReportAccess.relatorios.map(
+        (report) => ({
+          id: Number(report.id),
+          nome: report.nome,
+        }),
+      );
+
+      const userLabel = `${user.nome} ${user.sobrenome}`.trim();
+      for (const report of relatoriosPrivados) {
+        const existing = reportAccessIndex.get(report.id) ?? [];
+        existing.push(userLabel);
+        reportAccessIndex.set(report.id, existing);
+      }
+
+      if (exigirDashboardsPrivados && dashboardsPrivados.length === 0) {
+        continue;
+      }
+      if (exigirRelatoriosPrivados && relatoriosPrivados.length === 0) {
+        continue;
+      }
+      if (
+        !exigirDashboardsPrivados &&
+        !exigirRelatoriosPrivados &&
+        dashboardsPrivados.length === 0 &&
+        relatoriosPrivados.length === 0
+      ) {
+        continue;
+      }
+
+      relacoes.push({
+        usuario: {
+          id: targetId,
+          nome: user.nome,
+          sobrenome: user.sobrenome,
+          email: user.email,
+          bloqueado: Boolean(user.bloqueado),
+        },
+        dashboardsPrivados,
+        relatoriosPrivados,
+      });
+    }
+
+    const privateDashboardsInSystem = privateDashboardsPage.data;
+
+    const relatoriosPrivadosNoSistema = privateReportsPage.data.map(
+      (report) => ({
+        id: Number(report.id),
+        nome: report.nome,
+        usuariosComAcesso: reportAccessIndex.get(Number(report.id)) ?? [],
+      }),
+    );
+
+    return {
+      total: relacoes.length,
+      relatoriosPrivadosNoSistema,
+      dashboardsPrivadosNoSistemaTotal: privateDashboardsInSystem.length,
+      relacoes,
+    };
+  }
+
   async getUser(
     userId: number,
     targetUserId: number,
   ): Promise<AiAdminUserDetail> {
-    await this.assertAdmin(userId);
+    await this.assertCanManageUsers(userId);
 
     const [
       user,
@@ -227,6 +381,16 @@ export class AiAdminToolsService {
     if (!isAdmin) {
       throw new ForbiddenException(
         'Apenas administradores podem consultar dados do sistema.',
+      );
+    }
+  }
+
+  private async assertCanManageUsers(userId: number): Promise<void> {
+    const canManageUsers = await this.aiAccessService.canMentionUsers(userId);
+
+    if (!canManageUsers) {
+      throw new ForbiddenException(
+        'Sem permissão para consultar usuários do sistema.',
       );
     }
   }

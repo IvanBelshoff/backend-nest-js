@@ -23,6 +23,7 @@
     "migration:revert": "typeorm-ts-node-commonjs -d ./src/database/data-source.ts migration:revert"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^4.0.16",
     "@duckdb/node-api": "^1.5.4-r.1",
     "@nestjs/common": "^11.0.1",
     "@nestjs/core": "^11.0.1",

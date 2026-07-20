@@ -5,6 +5,7 @@ import { AiAdminToolsService } from './ai-admin-tools.service';
 describe('AiAdminToolsService', () => {
   const aiAccessService = {
     isAdmin: jest.fn(),
+    canMentionUsers: jest.fn(),
   };
 
   const usersService = {
@@ -56,14 +57,14 @@ describe('AiAdminToolsService', () => {
     jest.clearAllMocks();
   });
 
-  it('blocks non-admin users', async () => {
-    aiAccessService.isAdmin.mockResolvedValue(false);
+  it('blocks users without REGRA_USUARIO/admin from listing users', async () => {
+    aiAccessService.canMentionUsers.mockResolvedValue(false);
 
     await expect(service.listUsers(2)).rejects.toBeInstanceOf(ForbiddenException);
   });
 
-  it('lists users without preferencias_ui for admin', async () => {
-    aiAccessService.isAdmin.mockResolvedValue(true);
+  it('lists users without preferencias_ui for user managers', async () => {
+    aiAccessService.canMentionUsers.mockResolvedValue(true);
     usersService.findAllPaginated.mockResolvedValue({
       total: 1,
       data: [
@@ -135,7 +136,7 @@ describe('AiAdminToolsService', () => {
   });
 
   it('returns only effective user access (private grants + public catalogs)', async () => {
-    aiAccessService.isAdmin.mockResolvedValue(true);
+    aiAccessService.canMentionUsers.mockResolvedValue(true);
     usersService.findByIdWithRelations.mockResolvedValue({
       id: 20,
       nome: 'Lucas',
@@ -198,5 +199,83 @@ describe('AiAdminToolsService', () => {
 
     expect(result.dashboards[0]).toMatchObject({ id: 3, nome: 'ANTT' });
     expect(result.dashboards[0]).not.toHaveProperty('url');
+  });
+
+  it('relates active users with private dashboards and reports', async () => {
+    aiAccessService.isAdmin.mockResolvedValue(true);
+    usersService.findAllPaginated.mockResolvedValue({
+      total: 2,
+      data: [
+        {
+          id: 1,
+          nome: 'Ana',
+          sobrenome: 'Silva',
+          email: 'ana@test.com',
+          bloqueado: false,
+          regra: [],
+          permissao: [],
+        },
+        {
+          id: 2,
+          nome: 'Bob',
+          sobrenome: 'Santos',
+          email: 'bob@test.com',
+          bloqueado: false,
+          regra: [],
+          permissao: [],
+        },
+      ],
+    });
+    reportService.findAllPaginated.mockResolvedValue({
+      total: 1,
+      data: [{ id: 20, nome: 'Rel A', privacidade: 'privado' }],
+    });
+    dashboardService.findAllPaginated.mockResolvedValue({
+      total: 1,
+      data: [{ id: 10, nome: 'Dash A', privacidade: 'privado' }],
+    });
+    dashboardService.getDashboardsByUser
+      .mockResolvedValueOnce({
+        dashboards: [{ id: 10, nome: 'Dash A' }],
+        dashboardsDisponiveis: [],
+      })
+      .mockResolvedValueOnce({
+        dashboards: [],
+        dashboardsDisponiveis: [],
+      });
+    reportService.getRelatoriosByUser
+      .mockResolvedValueOnce({
+        relatorios: [{ id: 20, nome: 'Rel A', permitirConhecimentoIa: true }],
+        relatoriosDisponiveis: [],
+      })
+      .mockResolvedValueOnce({
+        relatorios: [{ id: 21, nome: 'Rel B', permitirConhecimentoIa: false }],
+        relatoriosDisponiveis: [],
+      });
+
+    const result = await service.relateUsersPrivateAccess(1, {
+      somenteAtivos: true,
+      exigirDashboardsPrivados: true,
+      exigirRelatoriosPrivados: true,
+    });
+
+    expect(usersService.findAllPaginated).toHaveBeenCalledWith(
+      expect.objectContaining({ bloqueado: false }),
+    );
+    expect(result.total).toBe(1);
+    expect(result.relacoes[0]).toMatchObject({
+      usuario: { id: 1, email: 'ana@test.com' },
+      dashboardsPrivados: [{ id: 10, nome: 'Dash A' }],
+      relatoriosPrivados: [{ id: 20, nome: 'Rel A' }],
+    });
+    expect(result.relatoriosPrivadosNoSistema).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 20,
+          nome: 'Rel A',
+          usuariosComAcesso: expect.arrayContaining(['Ana Silva']),
+        }),
+      ]),
+    );
   });
 });

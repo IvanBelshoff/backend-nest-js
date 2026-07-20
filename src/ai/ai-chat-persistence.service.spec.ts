@@ -180,9 +180,11 @@ describe('AiChatPersistenceService', () => {
     expect(prompt).not.toContain('ID 5');
     expect(prompt).toContain('Referência interna para ferramentas');
     expect(prompt).toContain('5: Dashboards por Usuário [online]');
-    expect(prompt).toContain('Online: consultarRelatorio executa query real');
-    expect(prompt).toContain('Offline: consultarRelatorio lê snapshot');
+    expect(prompt).toContain('Online: a consulta de relatório executa query real');
+    expect(prompt).toContain('Offline: a consulta de relatório lê snapshot');
+    expect(prompt).toContain('Nunca cite nomes técnicos de ferramentas');
     expect(prompt).not.toContain('Permissões de administrador');
+    expect(prompt).toContain('PROIBIDO mencionar capacidades administrativas');
   });
 
   it('includes admin block only for administrators', () => {
@@ -199,7 +201,24 @@ describe('AiChatPersistenceService', () => {
 
     expect(adminPrompt).toContain('Permissões de administrador');
     expect(adminPrompt).toContain('preferências de UI');
+    expect(adminPrompt).toContain('listar usuários, dashboards, métricas, jobs');
     expect(userPrompt).not.toContain('Permissões de administrador');
+    expect(userPrompt).not.toContain('listar usuários, dashboards, métricas, jobs');
     expect(userPrompt).toContain('não tem permissão');
+    expect(userPrompt).toContain('PROIBIDO mencionar capacidades administrativas');
+  });
+
+  it('allows user listing for REGRA_USUARIO without admin metrics/jobs', () => {
+    const prompt = service.buildSystemPrompt(
+      { id: 21, nome: 'Ivan', sobrenome: 'Belshoff' } as any,
+      [],
+      { isAdmin: false, canManageUsers: true },
+    );
+
+    expect(prompt).toContain('gestão de usuários');
+    expect(prompt).toContain('listagem/consulta de usuários');
+    expect(prompt).not.toContain('Permissões de administrador');
+    expect(prompt).toContain('métricas globais, jobs');
+    expect(prompt).not.toContain('PROIBIDO mencionar capacidades administrativas');
   });
 });

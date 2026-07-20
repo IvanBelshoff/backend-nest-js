@@ -170,13 +170,13 @@ export class AiMentionService {
       } else if (mention.type === 'dominio_usuarios') {
         const stats = await this.getUserDomainStats();
         parts.push(
-          `[Contexto autorizado do servidor] Alvo: domínio Usuários. total=${stats.total}; ativos=${stats.ativos}; bloqueados=${stats.bloqueados}. Responda contagens com estes valores. Não invente. Não use 50 (limit de página) como total. Não escreva JSON.`,
+          `[Contexto autorizado do servidor] Alvo: domínio Usuários. total=${stats.total}; ativos=${stats.ativos}; bloqueados=${stats.bloqueados}. Contagens simples: use estes valores. Para relações/listas detalhadas (acessos a dashboards/relatórios), chame as ferramentas autorizadas. Não invente. Não use 50 (limit de página) como total.`,
         );
       } else if (mention.type === 'dominio_relatorios') {
         const catalog =
           await this.aiReportToolsService.getReportCatalogForPrompt(userId);
         parts.push(
-          `[Contexto autorizado do servidor] Alvo: domínio Relatórios. total=${catalog.length}. Responda contagens com este valor. Não invente. Não peça para consultar o banco. Não escreva JSON.`,
+          `[Contexto autorizado do servidor] Alvo: domínio Relatórios. total=${catalog.length}. Contagens simples: use este valor. Para relações com usuários/dashboards, chame as ferramentas autorizadas. Não invente.`,
         );
       } else if (mention.type.startsWith('dominio_')) {
         parts.push(

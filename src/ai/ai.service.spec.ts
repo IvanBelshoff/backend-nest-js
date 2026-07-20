@@ -2,10 +2,17 @@ jest.mock('ai-sdk-ollama', () => ({
   createOllama: jest.fn(() => jest.fn()),
 }));
 
+jest.mock('@ai-sdk/openai', () => ({
+  createOpenAI: jest.fn(() => ({
+    chat: jest.fn(),
+  })),
+}));
+
 jest.mock('src/shared/env.schema', () => ({
   env: {
     OLLAMA_BASE_URL: 'http://localhost:11434',
     OLLAMA_MODEL: 'qwen3.5:4b',
+    API_KEY: undefined,
   },
 }));
 
