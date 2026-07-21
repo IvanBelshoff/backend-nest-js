@@ -96,6 +96,8 @@ export class AiMentionService {
             `- Dashboard destacado: "${dashboard.nome}" (id interno ${Number(dashboard.id)})`,
             `  Metadados do dashboard (fonte autorizada): data_criacao=${criadoEm}; data_atualizacao=${atualizadoEm}; privacidade=${String(dashboard.privacidade)}; cadastrado_por=${dashboard.usuario_cadastrador ?? 'desconhecido'}.`,
             '  Se o usuário perguntar quando foi cadastrado/criado, responda com data_criacao deste dashboard.',
+            '  Para perguntas pontuais sobre indicadores/KPIs, use a inspeção do dashboard com este id interno.',
+            '  Para analisar/explorar/comparar/filtrar o painel, use o modo avançado (oferecerAnaliseDashboard) com este id.',
           );
           break;
         }
@@ -157,7 +159,7 @@ export class AiMentionService {
             : String(dashboard.data_criacao ?? '');
         const cadastradoPor = dashboard.usuario_cadastrador ?? 'desconhecido';
         parts.push(
-          `[Contexto autorizado do servidor] Alvo: DASHBOARD "${dashboard.nome}". data_criacao=${criadoEm}; cadastrado_por=${cadastradoPor}. Responda em português do Brasil com estes fatos. Não chame ferramentas. Não escreva JSON nem nomes de funções.`,
+          `[Contexto autorizado do servidor] Alvo: DASHBOARD "${dashboard.nome}" (id interno ${Number(dashboard.id)}). data_criacao=${criadoEm}; cadastrado_por=${cadastradoPor}. Metadados de cadastro podem ser respondidos com estes fatos. Indicadores pontuais: inspeção do dashboard. Análise/exploração: modo avançado (oferecerAnaliseDashboard). Não escreva JSON nem nomes de funções ao usuário.`,
         );
       } else if (mention.type === 'relatorio' && mention.id != null) {
         parts.push(

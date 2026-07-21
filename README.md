@@ -14,6 +14,7 @@ API REST para o DataDash: autenticação JWT, gestão de usuários, dashboards e
 npm install
 cp .env.example .env
 # Edite .env com credenciais reais do PostgreSQL e secrets
+npx playwright install chromium   # necessário para inspeção de dashboards Power BI (IA)
 npm run migration:run
 npm run start:dev
 ```
@@ -42,6 +43,15 @@ Todas as variáveis obrigatórias estão documentadas em [`.env.example`](.env.e
 | `STORAGE_DRIVER` | Driver de snapshots Parquet (`local`) |
 | `SNAPSHOT_STORAGE_DIR` | Diretório dos arquivos Parquet |
 | `DUCKDB_MAX_CONCURRENCY` | Limite de consultas DuckDB simultâneas |
+| `AI_DASHBOARD_EXTRACT_ENABLED` | Liga/desliga inspeção Playwright de dashboards Power BI públicos (default true) |
+| `AI_DASHBOARD_EXTRACT_TIMEOUT_MS` | Timeout da inspeção headless (default 45000) |
+| `AI_DASHBOARD_EXTRACT_CACHE_TTL_MS` | TTL do cache em memória do extract (default 600000) |
+
+## IA — inspeção básica de Power BI público
+
+Com `@dashboard` no chat, a tool `inspecionarDashboard` abre a URL pública (Publish to web) via Playwright, extrai textos/ARIA/KPIs da **página inicial** e devolve JSON sanitizado (sem URL) para o modelo.
+
+Pré-requisito: `npx playwright install chromium`.
 
 ## Snapshots analíticos (Parquet + DuckDB)
 

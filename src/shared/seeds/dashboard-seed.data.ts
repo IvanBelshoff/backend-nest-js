@@ -58,9 +58,9 @@ function buildDashboardSeedData(): DashboardSeedInput[] {
   return [
     {
       nome: 'BI Senac',
-      url: 'https://app.powerbi.com/view?r=bi-senac',
+      url: 'https://app.powerbi.com/view?r=eyJrIjoiZTkyNGU2MjctM2RhNC00YzQ4LTgyZGItMDY1ZmE4NWQzYTA4IiwidCI6ImFiMDVjMmE3LTI1NTctNDM4MS04ZTkzLWQxN2QwZWM5ODg1YSJ9',
       icone: pickIcon(2),
-      privacidade: Privacidade.PRIVAT,
+      privacidade: Privacidade.PUBLIC,
       visivel: true,
       temporario: false,
       query: 'SELECT 1',

@@ -105,6 +105,39 @@ export const envSchema = z.object({
   METRICS_RETENTION_DAYS: z.coerce.number().int().positive().default(7),
   AI_MAX_REPORT_ROWS: z.coerce.number().int().positive().default(100),
   AI_MAX_STEPS: z.coerce.number().int().positive().default(5),
+  AI_DASHBOARD_EXTRACT_ENABLED: z
+    .string()
+    .optional()
+    .transform((value) => value !== 'false'),
+  AI_DASHBOARD_EXTRACT_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(45000),
+  AI_DASHBOARD_EXTRACT_CACHE_TTL_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(600000),
+  AI_DASHBOARD_EXPLORE_QUEUE_NAME: z
+    .string()
+    .min(1)
+    .default('ai.dashboard.explore'),
+  AI_DASHBOARD_EXPLORE_QUEUE_CONCURRENCY: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(1),
+  AI_DASHBOARD_EXPLORE_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(180000),
+  AI_DASHBOARD_EXPLORE_MAX_PAGES: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(8),
 }).and(aiEnvSchema);
 
 export type Env = z.infer<typeof envSchema>;

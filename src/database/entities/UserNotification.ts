@@ -16,6 +16,9 @@ export enum UserNotificationType {
   EXPORT_FAILED = 'export_failed',
   SNAPSHOT_READY = 'snapshot_ready',
   SNAPSHOT_FAILED = 'snapshot_failed',
+  AI_DASHBOARD_DISCOVERY_READY = 'ai_dashboard_discovery_ready',
+  AI_DASHBOARD_EXPLORE_READY = 'ai_dashboard_explore_ready',
+  AI_DASHBOARD_EXPLORE_FAILED = 'ai_dashboard_explore_failed',
 }
 
 @Entity('user_notifications')

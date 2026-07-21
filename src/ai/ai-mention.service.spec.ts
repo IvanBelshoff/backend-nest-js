@@ -158,4 +158,23 @@ describe('AiMentionService', () => {
     expect(section).toContain('total=2');
     expect(section).toContain('Domínio: Relatórios');
   });
+
+  it('builds mention user prefix instructing dashboard inspection tool', async () => {
+    dashboardService.findById.mockResolvedValue({
+      id: 1,
+      nome: 'BI Senac',
+      data_criacao: new Date('2024-01-15T12:00:00.000Z'),
+      usuario_cadastrador: 'admin',
+    });
+
+    const prefix = await service.buildMentionUserPrefix(1, [
+      { type: 'dashboard', id: 1, label: 'BI Senac' },
+    ]);
+
+    expect(prefix).toContain('BI Senac');
+    expect(prefix).toContain('id interno 1');
+    expect(prefix).toContain('inspeção do dashboard');
+    expect(prefix).toContain('modo avançado');
+    expect(prefix).not.toContain('Não chame ferramentas');
+  });
 });

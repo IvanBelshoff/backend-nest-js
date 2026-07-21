@@ -19,6 +19,8 @@ import { AiAdminToolsService } from './ai-admin-tools.service';
 import { AiChatPersistenceService } from './ai-chat-persistence.service';
 import { AiMentionService } from './ai-mention.service';
 import { AiReportToolsService } from './ai-report-tools.service';
+import { AiDashboardToolsService } from './ai-dashboard-tools.service';
+import { AiDashboardExploreService } from './ai-dashboard-explore.service';
 import { AiThreadTitleService } from './ai-thread-title.service';
 import { extractTextFromUIMessage } from './ai-thread-title.util';
 import type { AiMentionDto } from './dto/ai-chat.dto';
@@ -78,6 +80,10 @@ const KNOWN_TOOL_NAMES = [
   'listarRelatoriosDisponiveis',
   'descreverRelatorio',
   'consultarRelatorio',
+  'inspecionarDashboard',
+  'oferecerAnaliseDashboard',
+  'proporPlanoAnaliseDashboard',
+  'obterMapaDashboard',
   'listarUsuariosSistema',
   'relacionarAcessosUsuarios',
   'obterUsuarioSistema',
@@ -127,6 +133,12 @@ function asksCapabilityQuestion(text: string): boolean {
   );
 }
 
+function wantsAdvancedDashboardAnalysis(text: string): boolean {
+  return /analis|explor|compar(e|ar)|todas as abas|filtre|filtrar|cruzar|modo avan[cç]ado|relat[oó]rio\s+(anal[ií]tico|completo)/i.test(
+    text,
+  );
+}
+
 function redactToolNamesFromUiMessageStream<T extends Record<string, unknown>>(
   stream: ReadableStream<T>,
 ): ReadableStream<T> {
@@ -171,6 +183,8 @@ export class AiChatService {
     private readonly aiAccessService: AiAccessService,
     private readonly aiChatPersistenceService: AiChatPersistenceService,
     private readonly aiReportToolsService: AiReportToolsService,
+    private readonly aiDashboardToolsService: AiDashboardToolsService,
+    private readonly aiDashboardExploreService: AiDashboardExploreService,
     private readonly aiAdminToolsService: AiAdminToolsService,
     private readonly aiThreadTitleService: AiThreadTitleService,
     private readonly aiMentionService: AiMentionService,
@@ -247,13 +261,43 @@ export class AiChatService {
         userId,
         validatedMentions,
       );
+    const dashboardMention = validatedMentions.find(
+      (m) => m.type === 'dashboard' && m.id != null,
+    );
+    const mapa =
+      dashboardMention?.id != null
+        ? await this.aiDashboardExploreService.getLatestMapaForThread(
+            userId,
+            thread.id,
+            dashboardMention.id,
+          )
+        : await this.aiDashboardExploreService.getLatestMapaForThread(
+            userId,
+            thread.id,
+          );
+    const mapaSection = mapa
+      ? [
+          '',
+          'Mapa do dashboard (modo análise — fonte autorizada, sem URL):',
+          JSON.stringify(mapa),
+          'Use SOMENTE abas/filtros/valores deste mapa ao perguntar ou montar o plano. Não invente opções.',
+          'Quando o usuário responder às perguntas de esclarecimento, chame proporPlanoAnaliseDashboard com o plano sintetizado.',
+        ].join('\n')
+      : '';
+    const advancedIntent =
+      wantsAdvancedDashboardAnalysis(lastUserPlain) &&
+      Boolean(dashboardMention);
+    const advancedPrefix = advancedIntent
+      ? '[Instrução] O usuário pediu análise/exploração avançada do dashboard. Chame imediatamente oferecerAnaliseDashboard com o id do dashboard mencionado. NÃO use só inspeção pontual. Nunca revele URL.'
+      : '';
     const messagesForModel = this.withMentionPrefixOnLastUserMessage(
       params.messages,
-      mentionUserPrefix,
+      [mentionUserPrefix, advancedPrefix].filter(Boolean).join('\n'),
     );
 
     const tools = {
       ...this.buildReportTools(userId),
+      ...this.buildDashboardTools(userId, thread.id),
       ...(canManageUsers && !isAdmin
         ? this.buildUserManagementTools(userId)
         : {}),
@@ -278,9 +322,6 @@ export class AiChatService {
       !asksRelation &&
       !/privad|ativ|lista|relacione|crie/i.test(lastUserPlain);
 
-    const dashboardMentionWithFacts = validatedMentions.some(
-      (m) => m.type === 'dashboard' && mentionUserPrefix.includes('data_criacao='),
-    );
     const usersDomainWithFacts = validatedMentions.some(
       (m) =>
         m.type === 'dominio_usuarios' && mentionUserPrefix.includes('total='),
@@ -289,18 +330,18 @@ export class AiChatService {
       (m) =>
         m.type === 'dominio_relatorios' && mentionUserPrefix.includes('total='),
     );
+    // Metadados de dashboard (data_criacao) NÃO desligam tools — indicadores exigem inspeção.
     const preferMentionFactsOnly =
       asksCapabilities ||
       (!asksRelation &&
-        (dashboardMentionWithFacts ||
-          ((usersDomainWithFacts || reportsDomainWithFacts) && asksCountOnly)));
-
+        (usersDomainWithFacts || reportsDomainWithFacts) &&
+        asksCountOnly);
     const capabilityPrefix = asksCapabilities
       ? isAdmin
         ? '[Instrução de segurança] O usuário perguntou o que você pode fazer. Responda em português do Brasil, em linguagem de negócio (relatórios, dashboards, usuários, métricas, jobs). PROIBIDO citar nomes técnicos de funções/tools (camelCase), identificadores internos ou parâmetros de API. Não invente capacidades.'
         : canManageUsers
-          ? '[Instrução de segurança] O usuário perguntou o que você pode fazer. Responda em português do Brasil descrevendo: consultar/listar/interpretar relatórios autorizados e listar/consultar usuários do sistema. PROIBIDO mencionar métricas globais, jobs ou infraestrutura. PROIBIDO citar nomes técnicos de funções/tools. Não invente capacidades.'
-          : '[Instrução de segurança] O usuário perguntou o que você pode fazer. Responda em português do Brasil descrevendo APENAS: consultar/listar/interpretar os relatórios autorizados no catálogo. PROIBIDO mencionar usuários do sistema, métricas globais, jobs, infraestrutura ou qualquer capacidade administrativa. PROIBIDO citar nomes técnicos de funções/tools. Não invente capacidades.'
+          ? '[Instrução de segurança] O usuário perguntou o que você pode fazer. Responda em português do Brasil descrevendo: consultar/listar/interpretar relatórios autorizados, inspecionar dashboards Power BI mencionados e listar/consultar usuários do sistema. PROIBIDO mencionar métricas globais, jobs ou infraestrutura. PROIBIDO citar nomes técnicos de funções/tools. Não invente capacidades.'
+          : '[Instrução de segurança] O usuário perguntou o que você pode fazer. Responda em português do Brasil descrevendo APENAS: consultar/listar/interpretar os relatórios autorizados no catálogo e inspecionar dashboards Power BI mencionados para perguntas pontuais. PROIBIDO mencionar usuários do sistema, métricas globais, jobs, infraestrutura ou qualquer capacidade administrativa. PROIBIDO citar nomes técnicos de funções/tools. Não invente capacidades.'
       : '';
     const messagesForCapabilities = this.withMentionPrefixOnLastUserMessage(
       messagesForModel,
@@ -312,7 +353,13 @@ export class AiChatService {
       system: this.aiChatPersistenceService.buildSystemPrompt(
         params.user,
         reportCatalog,
-        { isAdmin, canManageUsers, mentionsSection },
+        {
+          isAdmin,
+          canManageUsers,
+          mentionsSection: [mentionsSection, mapaSection]
+            .filter(Boolean)
+            .join('\n'),
+        },
       ),
       messages: await convertToModelMessages(messagesForCapabilities),
       tools,
@@ -474,6 +521,96 @@ export class AiChatService {
             relatorioId,
             parametros ?? {},
           ),
+      }),
+    };
+  }
+
+  private buildDashboardTools(userId: number, threadId: string) {
+    return {
+      inspecionarDashboard: tool({
+        description:
+          'Inspeciona um dashboard Power BI público autorizado (modo básico): extrai textos, KPIs e tabelas legíveis da página/vista inicial. Use para perguntas pontuais sobre indicadores na vista atual. NÃO use para pedidos de análise/exploração/comparação entre anos ou todas as abas — nesse caso use oferecerAnaliseDashboard. Cite a fonte pelo nome. Nunca revele URL. Se avisoLimitacoes indicar ausência de dados, admita a limitação sem inventar números, seções ou datas.',
+        inputSchema: z.object({
+          dashboardId: z.number().int().positive(),
+          foco: z
+            .string()
+            .optional()
+            .describe(
+              'Pergunta ou foco do usuário (ex.: vigência). Sempre passe o foco literal da pergunta.',
+            ),
+        }),
+        execute: async ({ dashboardId, foco }) =>
+          this.aiDashboardToolsService.inspect(userId, dashboardId, foco),
+      }),
+      oferecerAnaliseDashboard: tool({
+        description:
+          'Oferece o modo avançado de análise conversacional de um dashboard (discovery → perguntas → plano → análise assíncrona). Use quando o usuário pedir analisar/explorar/comparar/filtrar/relatório analítico. Retorna exploreCard para a UI. Não inicia o job sozinho.',
+        inputSchema: z.object({
+          dashboardId: z.number().int().positive(),
+        }),
+        execute: async ({ dashboardId }) =>
+          this.aiDashboardExploreService.offerDiscoveryCard({
+            userId,
+            dashboardId,
+          }),
+      }),
+      obterMapaDashboard: tool({
+        description:
+          'Retorna o mapa já descoberto do dashboard nesta thread (abas, filtros/valores, destaques da capa). Use após o discovery para ancorar perguntas. Não invente valores ausentes do mapa.',
+        inputSchema: z.object({
+          dashboardId: z.number().int().positive().optional(),
+        }),
+        execute: async ({ dashboardId }) => {
+          const mapa =
+            await this.aiDashboardExploreService.getLatestMapaForThread(
+              userId,
+              threadId,
+              dashboardId,
+            );
+          return {
+            mapa,
+            aviso: mapa
+              ? null
+              : 'Mapa ainda indisponível. Peça ao usuário para iniciar a análise (card Iniciar análise).',
+          };
+        },
+      }),
+      proporPlanoAnaliseDashboard: tool({
+        description:
+          'Propõe o plano de análise após o usuário responder às perguntas de esclarecimento. Use apenas filtros/abas presentes no mapa. Retorna exploreCard de confirmação para a UI.',
+        inputSchema: z.object({
+          dashboardId: z.number().int().positive(),
+          abas: z.array(z.string()).max(20).optional(),
+          filtros: z
+            .array(
+              z.object({
+                nome: z.string(),
+                valor: z.string(),
+              }),
+            )
+            .max(20)
+            .optional(),
+          perguntaAnalitica: z.string().min(1).max(2000),
+          objetivo: z.string().max(2000).optional(),
+        }),
+        execute: async ({
+          dashboardId,
+          abas,
+          filtros,
+          perguntaAnalitica,
+          objetivo,
+        }) =>
+          this.aiDashboardExploreService.proposeAnalysisPlan({
+            userId,
+            threadId,
+            dashboardId,
+            plano: {
+              abas: abas ?? [],
+              filtros: filtros ?? [],
+              perguntaAnalitica,
+              objetivo,
+            },
+          }),
       }),
     };
   }

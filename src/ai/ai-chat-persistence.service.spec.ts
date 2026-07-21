@@ -182,9 +182,12 @@ describe('AiChatPersistenceService', () => {
     expect(prompt).toContain('5: Dashboards por Usuário [online]');
     expect(prompt).toContain('Online: a consulta de relatório executa query real');
     expect(prompt).toContain('Offline: a consulta de relatório lê snapshot');
+    expect(prompt).toContain('Dashboards Power BI públicos');
     expect(prompt).toContain('Nunca cite nomes técnicos de ferramentas');
     expect(prompt).not.toContain('Permissões de administrador');
     expect(prompt).toContain('PROIBIDO mencionar capacidades administrativas');
+    expect(prompt).toContain('inspeção pontual de dashboards Power BI');
+    expect(prompt).toContain('análise guiada');
   });
 
   it('includes admin block only for administrators', () => {

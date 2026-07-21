@@ -2,7 +2,9 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AiChatMessage } from 'src/database/entities/AiChatMessage';
 import { AiChatThread } from 'src/database/entities/AiChatThread';
+import { AiDashboardExploreJob } from 'src/database/entities/AiDashboardExploreJobs';
 import { Relatorio } from 'src/database/entities/Relatorios';
+import { UserNotification } from 'src/database/entities/UserNotification';
 import { Usuario } from 'src/database/entities/Usuarios';
 import { UsuarioRelatorio } from 'src/database/entities/UsuarioRelatorio';
 import { DashboardModule } from 'src/dashboard/dashboard.module';
@@ -19,7 +21,12 @@ import { AiChatService } from './ai-chat.service';
 import { AiChatPersistenceService } from './ai-chat-persistence.service';
 import { AiMentionService } from './ai-mention.service';
 import { AiReportToolsService } from './ai-report-tools.service';
+import { AiDashboardToolsService } from './ai-dashboard-tools.service';
+import { AiDashboardExploreService } from './ai-dashboard-explore.service';
+import { PowerbiPublicExtractService } from './powerbi-public-extract.service';
+import { PowerbiPublicExploreService } from './powerbi-public-explore.service';
 import { AiThreadTitleService } from './ai-thread-title.service';
+import { AiDashboardExploreWorker } from './workers/ai-dashboard-explore.worker';
 
 @Module({
   imports: [
@@ -28,6 +35,8 @@ import { AiThreadTitleService } from './ai-thread-title.service';
       UsuarioRelatorio,
       AiChatThread,
       AiChatMessage,
+      AiDashboardExploreJob,
+      UserNotification,
       Relatorio,
     ]),
     ReportModule,
@@ -45,8 +54,13 @@ import { AiThreadTitleService } from './ai-thread-title.service';
     AiChatPersistenceService,
     AiMentionService,
     AiReportToolsService,
+    AiDashboardToolsService,
+    AiDashboardExploreService,
+    PowerbiPublicExtractService,
+    PowerbiPublicExploreService,
     AiAdminToolsService,
     AiThreadTitleService,
+    AiDashboardExploreWorker,
   ],
   exports: [AiAccessService],
 })

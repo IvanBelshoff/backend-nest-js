@@ -15,6 +15,7 @@ import { Usuario } from './entities/Usuarios';
 import { UsuarioRelatorio } from './entities/UsuarioRelatorio';
 import { AiChatThread } from './entities/AiChatThread';
 import { AiChatMessage } from './entities/AiChatMessage';
+import { AiDashboardExploreJob } from './entities/AiDashboardExploreJobs';
 
 export const entities = [
   Usuario,
@@ -33,6 +34,7 @@ export const entities = [
   UsuarioRelatorio,
   AiChatThread,
   AiChatMessage,
+  AiDashboardExploreJob,
 ];
 
 export function getTypeOrmConfig() {

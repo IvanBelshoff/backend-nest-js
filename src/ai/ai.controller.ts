@@ -19,6 +19,7 @@ import { AiAccessGuard } from './ai-access.guard';
 import { AiAccessService } from './ai-access.service';
 import { AiChatService } from './ai-chat.service';
 import { AiChatPersistenceService } from './ai-chat-persistence.service';
+import { AiDashboardExploreService } from './ai-dashboard-explore.service';
 import { AiMentionService } from './ai-mention.service';
 import { AiService } from './ai.service';
 import {
@@ -27,6 +28,12 @@ import {
   type AiChatDto,
   type CreateAiThreadDto,
 } from './dto/ai-chat.dto';
+import {
+  confirmAnalysisSchema,
+  startDiscoverySchema,
+  type ConfirmAnalysisDto,
+  type StartDiscoveryDto,
+} from './dto/ai-dashboard-explore.dto';
 
 @Controller('ai')
 export class AiController {
@@ -36,6 +43,7 @@ export class AiController {
     private readonly aiChatService: AiChatService,
     private readonly aiChatPersistenceService: AiChatPersistenceService,
     private readonly aiMentionService: AiMentionService,
+    private readonly aiDashboardExploreService: AiDashboardExploreService,
   ) {}
 
   @Get('health')
@@ -165,5 +173,55 @@ export class AiController {
       mentions: body.mentions,
       res,
     });
+  }
+
+  @Post('dashboard-explore/start-discovery')
+  @UseGuards(AiAccessGuard)
+  @ZodValidation(startDiscoverySchema)
+  async startDiscovery(
+    @Body() dto: StartDiscoveryDto,
+    @Request() req: UserRequest,
+  ) {
+    if (!req.user) {
+      throw new UnauthorizedException();
+    }
+
+    return this.aiDashboardExploreService.startDiscovery({
+      userId: Number(req.user.sub),
+      threadId: dto.threadId,
+      dashboardId: dto.dashboardId,
+    });
+  }
+
+  @Post('dashboard-explore/confirm-analysis')
+  @UseGuards(AiAccessGuard)
+  @ZodValidation(confirmAnalysisSchema)
+  async confirmAnalysis(
+    @Body() dto: ConfirmAnalysisDto,
+    @Request() req: UserRequest,
+  ) {
+    if (!req.user) {
+      throw new UnauthorizedException();
+    }
+
+    return this.aiDashboardExploreService.confirmAnalysis({
+      userId: Number(req.user.sub),
+      threadId: dto.threadId,
+      dashboardId: dto.dashboardId,
+      plano: dto.plano,
+    });
+  }
+
+  @Get('dashboard-explore/jobs/:id')
+  @UseGuards(AiAccessGuard)
+  async getExploreJob(
+    @Param('id') jobId: string,
+    @Request() req: UserRequest,
+  ) {
+    if (!req.user) {
+      throw new UnauthorizedException();
+    }
+
+    return this.aiDashboardExploreService.getJob(Number(req.user.sub), jobId);
   }
 }

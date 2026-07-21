@@ -7,6 +7,7 @@ import {
 import { PgBoss, type JobWithMetadata, type ScheduleOptions, type SendOptions } from 'pg-boss';
 import { buildPgConnectionString } from './pg-connection.util';
 import {
+  AI_DASHBOARD_EXPLORE_QUEUE,
   REPORT_EXPORT_QUEUE,
   REPORT_SNAPSHOT_QUEUE,
   SCHEDULER_DISPATCH_QUEUE,
@@ -80,6 +81,11 @@ export class PgBossService implements OnModuleInit, OnModuleDestroy {
       retryLimit: 2,
       retryDelay: 30,
     });
+
+    await this.boss.createQueue(AI_DASHBOARD_EXPLORE_QUEUE, {
+      retryLimit: 1,
+      retryDelay: 60,
+    });
   }
 
   private async registerWorker(
@@ -95,7 +101,9 @@ export class PgBossService implements OnModuleInit, OnModuleDestroy {
         ? env.REPORT_SNAPSHOT_QUEUE_CONCURRENCY
         : queueName === SCHEDULER_DISPATCH_QUEUE
           ? 1
-          : env.REPORT_EXPORT_QUEUE_CONCURRENCY;
+          : queueName === AI_DASHBOARD_EXPLORE_QUEUE
+            ? env.AI_DASHBOARD_EXPLORE_QUEUE_CONCURRENCY
+            : env.REPORT_EXPORT_QUEUE_CONCURRENCY;
 
     await this.boss.work(
       queueName,
