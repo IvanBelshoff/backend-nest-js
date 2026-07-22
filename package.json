@@ -20,7 +20,8 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "migration:generate": "typeorm-ts-node-commonjs -d ./src/database/data-source.ts migration:generate ./src/database/migrations/default",
     "migration:run": "typeorm-ts-node-commonjs -d ./src/database/data-source.ts migration:run",
-    "migration:revert": "typeorm-ts-node-commonjs -d ./src/database/data-source.ts migration:revert"
+    "migration:revert": "typeorm-ts-node-commonjs -d ./src/database/data-source.ts migration:revert",
+    "postinstall": "playwright install chromium"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.16",
@@ -54,7 +55,7 @@
     "passport-local": "^1.0.0",
     "pg": "^8.21.0",
     "pg-boss": "^12.25.1",
-    "playwright": "^1.61.1",
+    "playwright": "1.54.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "typeorm": "^1.0.0",

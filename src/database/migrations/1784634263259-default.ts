@@ -1,7 +1,7 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-export class Default1784333904432 implements MigrationInterface {
-    name = 'Default1784333904432'
+export class Default1784634263259 implements MigrationInterface {
+    name = 'Default1784634263259'
 
     public async up(queryRunner: QueryRunner): Promise<void> {
         await queryRunner.query(`CREATE TABLE "fotos" ("id" SERIAL NOT NULL, "nome" text NOT NULL, "originalname" text NOT NULL, "tipo" text NOT NULL, "tamanho" integer NOT NULL, "local" text NOT NULL, "url" text NOT NULL, "data_criacao" date NOT NULL DEFAULT now(), "data_atualizacao" date NOT NULL DEFAULT ('now'::text)::timestamp(6) with time zone, CONSTRAINT "PK_929dc0abc9924e9f2797dbca023" PRIMARY KEY ("id"))`);
@@ -31,7 +31,7 @@ export class Default1784333904432 implements MigrationInterface {
         await queryRunner.query(`CREATE INDEX "IDX_agendamento_vinculos_agendamento_id" ON "agendamento_vinculos"  ("agendamento_id") `);
         await queryRunner.query(`CREATE TYPE "public"."agendamentos_frequencia_enum" AS ENUM('minuto', 'hora', 'dia', 'semana', 'mes')`);
         await queryRunner.query(`CREATE TABLE "agendamentos" ("id" BIGSERIAL NOT NULL, "nome" text NOT NULL, "ativo" boolean NOT NULL DEFAULT true, "intervalo" integer NOT NULL DEFAULT '1', "frequencia" "public"."agendamentos_frequencia_enum" NOT NULL, "timezone" text NOT NULL DEFAULT 'America/Sao_Paulo', "hora_inicio" TIMESTAMP WITH TIME ZONE, "dias_semana" smallint array NOT NULL DEFAULT '{}', "horas" smallint array NOT NULL DEFAULT '{}', "minutos" smallint array NOT NULL DEFAULT '{0}', "cron_expression" text NOT NULL, "proxima_execucao" TIMESTAMP WITH TIME ZONE, "ultima_execucao" TIMESTAMP WITH TIME ZONE, "usuario_cadastrador" text, "usuario_atualizador" text, "data_criacao" TIMESTAMP NOT NULL DEFAULT now(), "data_atualizacao" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "PK_3890b7448ebc7efdfd1d43bf0c7" PRIMARY KEY ("id"))`);
-        await queryRunner.query(`CREATE TYPE "public"."user_notifications_type_enum" AS ENUM('export_ready', 'export_failed', 'snapshot_ready', 'snapshot_failed')`);
+        await queryRunner.query(`CREATE TYPE "public"."user_notifications_type_enum" AS ENUM('export_ready', 'export_failed', 'snapshot_ready', 'snapshot_failed', 'ai_dashboard_discovery_ready', 'ai_dashboard_explore_ready', 'ai_dashboard_explore_failed')`);
         await queryRunner.query(`CREATE TABLE "user_notifications" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "user_id" bigint NOT NULL, "type" "public"."user_notifications_type_enum" NOT NULL, "title" text NOT NULL, "body" text NOT NULL, "payload" jsonb NOT NULL DEFAULT '{}', "read_at" TIMESTAMP, "created_at" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "PK_569622b0fd6e6ab3661de985a2b" PRIMARY KEY ("id"))`);
         await queryRunner.query(`CREATE INDEX "IDX_user_notifications_user_id_read_at" ON "user_notifications"  ("user_id", "read_at") `);
         await queryRunner.query(`CREATE INDEX "IDX_user_notifications_user_id_created_at" ON "user_notifications"  ("user_id", "created_at") `);
@@ -39,6 +39,11 @@ export class Default1784333904432 implements MigrationInterface {
         await queryRunner.query(`CREATE INDEX "IDX_ai_chat_messages_thread_id_created_at" ON "ai_chat_messages"  ("thread_id", "created_at") `);
         await queryRunner.query(`CREATE TABLE "ai_chat_threads" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "user_id" bigint NOT NULL, "titulo" text, "created_at" TIMESTAMP NOT NULL DEFAULT now(), "updated_at" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "PK_f3c42fae4e67af47f67ec7ebb70" PRIMARY KEY ("id"))`);
         await queryRunner.query(`CREATE INDEX "IDX_ai_chat_threads_user_id_updated_at" ON "ai_chat_threads"  ("user_id", "updated_at") `);
+        await queryRunner.query(`CREATE TYPE "public"."ai_dashboard_explore_jobs_fase_enum" AS ENUM('discovery', 'analysis')`);
+        await queryRunner.query(`CREATE TYPE "public"."ai_dashboard_explore_jobs_status_enum" AS ENUM('queued', 'processing', 'completed', 'failed')`);
+        await queryRunner.query(`CREATE TABLE "ai_dashboard_explore_jobs" ("id" uuid NOT NULL, "user_id" integer NOT NULL, "thread_id" uuid NOT NULL, "dashboard_id" bigint NOT NULL, "fase" "public"."ai_dashboard_explore_jobs_fase_enum" NOT NULL, "status" "public"."ai_dashboard_explore_jobs_status_enum" NOT NULL DEFAULT 'queued', "progress" integer NOT NULL DEFAULT '0', "mapa" jsonb, "plano" jsonb, "extract" jsonb, "insight_message_id" uuid, "error_message" text, "created_at" TIMESTAMP NOT NULL DEFAULT now(), "updated_at" TIMESTAMP NOT NULL DEFAULT now(), "completed_at" TIMESTAMP, CONSTRAINT "PK_b6a87f53f057bb80a34db649a38" PRIMARY KEY ("id"))`);
+        await queryRunner.query(`CREATE INDEX "IDX_ai_dash_explore_thread_id" ON "ai_dashboard_explore_jobs"  ("thread_id") `);
+        await queryRunner.query(`CREATE INDEX "IDX_ai_dash_explore_user_id" ON "ai_dashboard_explore_jobs"  ("user_id") `);
         await queryRunner.query(`CREATE TABLE "usuarios_permissoes" ("usuario_id" bigint NOT NULL, "permissao_id" bigint NOT NULL, CONSTRAINT "PK_c2275cafd5b7251e1901e02768d" PRIMARY KEY ("usuario_id", "permissao_id"))`);
         await queryRunner.query(`CREATE INDEX "IDX_a590446adec482807e08a9f17f" ON "usuarios_permissoes"  ("usuario_id") `);
         await queryRunner.query(`CREATE INDEX "IDX_bc6db171d9b3fa0891abc5c204" ON "usuarios_permissoes"  ("permissao_id") `);
@@ -96,6 +101,11 @@ export class Default1784333904432 implements MigrationInterface {
         await queryRunner.query(`DROP INDEX "public"."IDX_bc6db171d9b3fa0891abc5c204"`);
         await queryRunner.query(`DROP INDEX "public"."IDX_a590446adec482807e08a9f17f"`);
         await queryRunner.query(`DROP TABLE "usuarios_permissoes"`);
+        await queryRunner.query(`DROP INDEX "public"."IDX_ai_dash_explore_user_id"`);
+        await queryRunner.query(`DROP INDEX "public"."IDX_ai_dash_explore_thread_id"`);
+        await queryRunner.query(`DROP TABLE "ai_dashboard_explore_jobs"`);
+        await queryRunner.query(`DROP TYPE "public"."ai_dashboard_explore_jobs_status_enum"`);
+        await queryRunner.query(`DROP TYPE "public"."ai_dashboard_explore_jobs_fase_enum"`);
         await queryRunner.query(`DROP INDEX "public"."IDX_ai_chat_threads_user_id_updated_at"`);
         await queryRunner.query(`DROP TABLE "ai_chat_threads"`);
         await queryRunner.query(`DROP INDEX "public"."IDX_ai_chat_messages_thread_id_created_at"`);

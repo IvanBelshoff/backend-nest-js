@@ -7,7 +7,7 @@
     "assets": [
       {
         "include": "shared/data/default/profile.jpg",
-        "outDir": "dist"
+        "outDir": "dist/src"
       }
     ]
   }
