@@ -56,7 +56,7 @@ export const AUTH_ENDPOINT_MATRIX = {
     },
     'GET /dashboards/:id': { role: ['REGRA_DASHBOARD'] },
     'PATCH /dashboards/users/:id': {
-      permission: ['PERMISSAO_CONCEDER_ACESSO_USUARIO'],
+      permission: ['PERMISSAO_CONCEDER_ACESSO_USUARIO_DASHBOARD'],
     },
     'PATCH /dashboards/:id': {
       permission: ['PERMISSAO_ATUALIZAR_DASHBOARD'],
@@ -89,10 +89,10 @@ export const AUTH_ENDPOINT_MATRIX = {
     },
     'GET /relatorios/:id': { role: ['REGRA_RELATORIO'] },
     'PATCH /relatorios/users/:id': {
-      permission: ['PERMISSAO_CONCEDER_ACESSO_RELATORIO'],
+      permission: ['PERMISSAO_CONCEDER_ACESSO_USUARIO_RELATORIO'],
     },
     'PATCH /relatorios/:id/permitir-conhecimento-ia': {
-      permission: ['PERMISSAO_CONCEDER_ACESSO_RELATORIO'],
+      permission: ['PERMISSAO_CONCEDER_ACESSO_USUARIO_RELATORIO'],
     },
     'PATCH /relatorios/:id': {
       permission: ['PERMISSAO_ATUALIZAR_RELATORIO'],

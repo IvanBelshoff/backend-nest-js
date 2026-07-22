@@ -376,7 +376,7 @@ export class ReportController {
   }
 
   @Patch('/users/:id')
-  @Authorization('permission', ['PERMISSAO_CONCEDER_ACESSO_RELATORIO'])
+  @Authorization('permission', ['PERMISSAO_CONCEDER_ACESSO_USUARIO_RELATORIO'])
   @ZodValidation(assignReportUsersSchema)
   @HttpCode(204)
   async assignUsers(
@@ -387,7 +387,7 @@ export class ReportController {
   }
 
   @Patch('/:id/permitir-conhecimento-ia')
-  @Authorization('permission', ['PERMISSAO_CONCEDER_ACESSO_RELATORIO'])
+  @Authorization('permission', ['PERMISSAO_CONCEDER_ACESSO_USUARIO_RELATORIO'])
   @ZodValidation(updateReportUserAiKnowledgeSchema)
   @HttpCode(204)
   async updateReportUserAiKnowledge(

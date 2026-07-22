@@ -215,7 +215,7 @@ export class DashboardController {
   }
 
   @Patch('/users/:id')
-  @Authorization('permission', ['PERMISSAO_CONCEDER_ACESSO_USUARIO'])
+  @Authorization('permission', ['PERMISSAO_CONCEDER_ACESSO_USUARIO_DASHBOARD'])
   @ZodValidation(assignUsersSchema)
   @HttpCode(204)
   async assignUsers(

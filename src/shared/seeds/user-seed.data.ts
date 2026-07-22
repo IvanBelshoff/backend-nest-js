@@ -55,7 +55,7 @@ export const userSeedData: UserSeedInput[] = [
     regras: ['REGRA_DASHBOARD'],
     permissoes: [
       'PERMISSAO_ATUALIZAR_DASHBOARD',
-      'PERMISSAO_CONCEDER_ACESSO_USUARIO',
+      'PERMISSAO_CONCEDER_ACESSO_USUARIO_DASHBOARD',
     ],
   },
   {
@@ -120,7 +120,7 @@ export const userSeedData: UserSeedInput[] = [
     email: 'seed.user.12@datadash.dev',
     bloqueado: false,
     regras: ['REGRA_DASHBOARD'],
-    permissoes: ['PERMISSAO_CONCEDER_ACESSO_USUARIO'],
+    permissoes: ['PERMISSAO_CONCEDER_ACESSO_USUARIO_DASHBOARD'],
   },
   {
     nome: 'Natália',
@@ -138,7 +138,7 @@ export const userSeedData: UserSeedInput[] = [
     regras: ['REGRA_DASHBOARD'],
     permissoes: [
       'PERMISSAO_ATUALIZAR_DASHBOARD',
-      'PERMISSAO_CONCEDER_ACESSO_USUARIO',
+      'PERMISSAO_CONCEDER_ACESSO_USUARIO_DASHBOARD',
     ],
   },
   {
@@ -177,7 +177,7 @@ export const userSeedData: UserSeedInput[] = [
     permissoes: [
       'PERMISSAO_CRIAR_DASHBOARD',
       'PERMISSAO_EXCLUIR_DASHBOARD',
-      'PERMISSAO_CONCEDER_ACESSO_USUARIO',
+      'PERMISSAO_CONCEDER_ACESSO_USUARIO_DASHBOARD',
     ],
   },
 ];
