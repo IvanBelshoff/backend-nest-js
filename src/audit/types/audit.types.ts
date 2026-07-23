@@ -43,8 +43,21 @@ export interface AuditRecordInput {
   correlation_id?: string | null;
 }
 
+export interface AuditLogListItem {
+  id: string;
+  actor_user_id: number | null;
+  actor_email: string | null;
+  actor_type: AuditActorType;
+  action: string;
+  category: AuditCategory;
+  outcome: AuditOutcome;
+  resource_type: string | null;
+  resource_id: string | number | null;
+  criado_em: Date;
+}
+
 export interface AuditLogListResult {
-  items: AuditLogItem[];
+  items: AuditLogListItem[];
   page: number;
   pageSize: number;
   total: number;

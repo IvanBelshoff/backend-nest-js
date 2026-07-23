@@ -14,6 +14,7 @@ import {
 } from './dto/audit-query.dto';
 import type {
   AuditLogItem,
+  AuditLogListItem,
   AuditLogListResult,
   AuditRecordInput,
 } from './types/audit.types';
@@ -21,6 +22,8 @@ import {
   buildMongoSort,
   parseListSortParam,
 } from 'src/shared/sort/list-sort.util';
+
+const AUDIT_LIST_PROJECTION = '-metadata -http -correlation_id';
 
 @Injectable()
 export class AuditService {
@@ -53,6 +56,7 @@ export class AuditService {
     const [items, total] = await Promise.all([
       this.auditModel
         .find(filter)
+        .select(AUDIT_LIST_PROJECTION)
         .sort(mongoSort)
         .skip(skip)
         .limit(query.pageSize)
@@ -62,7 +66,7 @@ export class AuditService {
     ]);
 
     return {
-      items: items.map((item) => this.mapToItem(item)),
+      items: items.map((item) => this.mapToListItem(item)),
       page: query.page,
       pageSize: query.pageSize,
       total,
@@ -152,6 +156,23 @@ export class AuditService {
     }
 
     return filter;
+  }
+
+  private mapToListItem(
+    doc: UserAuditLog & { _id: Types.ObjectId; criado_em?: Date },
+  ): AuditLogListItem {
+    return {
+      id: doc._id.toString(),
+      actor_user_id: doc.actor_user_id,
+      actor_email: doc.actor_email,
+      actor_type: doc.actor_type as AuditLogListItem['actor_type'],
+      action: doc.action,
+      category: doc.category as AuditLogListItem['category'],
+      outcome: doc.outcome as AuditLogListItem['outcome'],
+      resource_type: doc.resource_type,
+      resource_id: doc.resource_id,
+      criado_em: doc.criado_em ?? new Date(),
+    };
   }
 
   private mapToItem(
