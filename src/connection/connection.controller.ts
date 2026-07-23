@@ -102,14 +102,22 @@ export class ConnectionController {
   @Delete('/:id')
   @Authorization('permission', ['PERMISSAO_EXCLUIR_CONEXAO'])
   @HttpCode(204)
-  async delete(@Param('id', ParseIntPipe) id: number) {
-    await this.connectionService.delete(id);
+  async delete(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: UserRequest.UserRequest,
+  ) {
+    if (!req.user) throw new UnauthorizedException();
+    await this.connectionService.delete(id, req.user);
   }
 
   @Post('/:id/testar')
   @Authorization('role', ['REGRA_RELATORIO'])
   @ApiOperation({ summary: 'Testa conectividade da conexão' })
-  async test(@Param('id', ParseIntPipe) id: number) {
-    return this.connectionService.test(id);
+  async test(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: UserRequest.UserRequest,
+  ) {
+    if (!req.user) throw new UnauthorizedException();
+    return this.connectionService.test(id, req.user);
   }
 }

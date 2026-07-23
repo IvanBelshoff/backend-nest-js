@@ -221,8 +221,10 @@ export class DashboardController {
   async assignUsers(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: AssignUsersDto,
+    @Request() req: UserRequest.UserRequest,
   ) {
-    await this.dashboardService.assignUsers(id, dto.usuarios);
+    if (!req.user) throw new UnauthorizedException();
+    await this.dashboardService.assignUsers(id, dto.usuarios, req.user);
   }
 
   @Patch('/:id')
@@ -243,7 +245,11 @@ export class DashboardController {
   @Delete('/:id')
   @Authorization('permission', ['PERMISSAO_EXCLUIR_DASHBOARD'])
   @HttpCode(204)
-  async delete(@Param('id', ParseIntPipe) id: number) {
-    await this.dashboardService.delete(id);
+  async delete(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: UserRequest.UserRequest,
+  ) {
+    if (!req.user) throw new UnauthorizedException();
+    await this.dashboardService.delete(id, req.user);
   }
 }

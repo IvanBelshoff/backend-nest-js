@@ -103,6 +103,15 @@ export const envSchema = z.object({
     .positive()
     .default(60),
   METRICS_RETENTION_DAYS: z.coerce.number().int().positive().default(7),
+  AUDIT_ENABLED: z
+    .string()
+    .optional()
+    .transform((value) => value !== 'false'),
+  AUDIT_LOG_TTL_DAYS: z.coerce.number().int().nonnegative().default(365),
+  AUDIT_DIFF_ENABLED: z
+    .string()
+    .optional()
+    .transform((value) => value !== 'false'),
   AI_MAX_REPORT_ROWS: z.coerce.number().int().positive().default(100),
   AI_MAX_STEPS: z.coerce.number().int().positive().default(5),
 }).and(aiEnvSchema);

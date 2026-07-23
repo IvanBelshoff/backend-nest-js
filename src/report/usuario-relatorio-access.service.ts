@@ -15,6 +15,12 @@ import {
   relatorioHasUserGrant,
   userHasRelatorioGrant,
 } from 'src/shared/utils/usuario-relatorio.util';
+import { AuditService } from 'src/audit/audit.service';
+import { AUDIT_ACTIONS } from 'src/audit/constants/audit-actions';
+import { toAuditActor } from 'src/audit/utils/audit-actor.util';
+import { buildAuditChanges } from 'src/audit/utils/build-audit-changes.util';
+import { ACL_IA_KNOWLEDGE_AUDIT_PROFILE } from 'src/audit/utils/audit-field-profiles';
+import { toAuditRecordMetadata } from 'src/audit/utils/audit-metadata.util';
 
 @Injectable()
 export class UsuarioRelatorioAccessService {
@@ -25,6 +31,7 @@ export class UsuarioRelatorioAccessService {
     private readonly relatorioRepository: Repository<Relatorio>,
     @InjectRepository(UsuarioRelatorio)
     private readonly usuarioRelatorioRepository: Repository<UsuarioRelatorio>,
+    private readonly auditService: AuditService,
   ) {}
 
   async ensureOwnerGrant(relatorioId: number): Promise<void> {
@@ -57,6 +64,7 @@ export class UsuarioRelatorioAccessService {
     usuarioId: number,
     relatorioId: number,
     permitirConhecimentoIa: boolean,
+    requester?: { sub: number; email: string },
   ): Promise<void> {
     const user = await this.userRepository.findOne({
       where: { id: usuarioId },
@@ -99,6 +107,13 @@ export class UsuarioRelatorioAccessService {
       }
     }
 
+    const existingGrant = user.usuarioRelatorios?.find(
+      (grant) => Number(grant.relatorioId) === relatorioId,
+    );
+    const beforeSnapshot = {
+      permitirConhecimentoIa: existingGrant?.permitirConhecimentoIa ?? false,
+    };
+
     await this.usuarioRelatorioRepository
       .createQueryBuilder()
       .insert()
@@ -110,5 +125,23 @@ export class UsuarioRelatorioAccessService {
       })
       .orUpdate(['permitir_conhecimento_ia'], ['usuario_id', 'relatorio_id'])
       .execute();
+
+    if (requester) {
+      this.auditService.record({
+        actor: toAuditActor(requester),
+        action: AUDIT_ACTIONS.REPORT_ACL_IA_KNOWLEDGE_UPDATE,
+        category: 'acl',
+        outcome: 'success',
+        resource: { type: 'relatorio', id: relatorioId },
+        metadata: toAuditRecordMetadata(
+          buildAuditChanges(
+            beforeSnapshot,
+            { permitirConhecimentoIa },
+            ACL_IA_KNOWLEDGE_AUDIT_PROFILE,
+          ),
+          { usuarioId },
+        ),
+      });
+    }
   }
 }

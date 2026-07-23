@@ -36,6 +36,20 @@ import {
 } from './usuario-preferencias-ui.util';
 import { assertRolePermissionAssignment } from '../shared/services/RolePermissionPolicy';
 import { RefreshTokenService } from '../auth/refresh-token.service';
+import { AuditService } from 'src/audit/audit.service';
+import { AUDIT_ACTIONS } from 'src/audit/constants/audit-actions';
+import { toAuditActor, toResourceId } from 'src/audit/utils/audit-actor.util';
+import {
+  buildAuditChanges,
+  buildAuditCreateChanges,
+  buildAuditDeleteChanges,
+} from 'src/audit/utils/build-audit-changes.util';
+import {
+  USUARIO_AUDIT_PROFILE,
+  USUARIO_ROLES_AUDIT_PROFILE,
+  pickUsuarioAuditSnapshot,
+} from 'src/audit/utils/audit-field-profiles';
+import { toAuditRecordMetadata } from 'src/audit/utils/audit-metadata.util';
 
 export interface UserListParams {
   page: number;
@@ -84,6 +98,7 @@ export class UsersService {
     private relatorioRepository: Repository<Relatorio>,
     @Inject(forwardRef(() => RefreshTokenService))
     private readonly refreshTokenService: RefreshTokenService,
+    private readonly auditService: AuditService,
   ) {}
 
   private assertUserNotBlocked(user: Usuario): void {
@@ -300,6 +315,7 @@ export class UsersService {
     }
 
     const wasBlocked = user.bloqueado;
+    const beforeSnapshot = pickUsuarioAuditSnapshot(user);
 
     if (wasBlocked && !this.isUnblockOnlyUpdate(user, dto, foto)) {
       if (foto?.path && existsSync(foto.path)) {
@@ -378,6 +394,18 @@ export class UsersService {
 
       const { senha: _senha, ...rest } = updated;
 
+      this.auditService.record({
+        actor: toAuditActor(requester),
+        action: AUDIT_ACTIONS.USER_UPDATE,
+        category: 'user',
+        outcome: 'success',
+        resource: { type: 'usuario', id },
+        metadata: toAuditRecordMetadata(
+          buildAuditChanges(beforeSnapshot, pickUsuarioAuditSnapshot(rest), USUARIO_AUDIT_PROFILE),
+          { email: rest.email },
+        ),
+      });
+
       return rest;
     } catch (error) {
       if (foto?.path && existsSync(foto.path)) {
@@ -387,7 +415,11 @@ export class UsersService {
     }
   }
 
-  async updatePassword(id: number, senha: string): Promise<void> {
+  async updatePassword(
+    id: number,
+    senha: string,
+    requester?: { sub: number; email: string },
+  ): Promise<void> {
     const user = await this.userRepository.findOne({ where: { id } });
 
     if (!user) {
@@ -402,6 +434,16 @@ export class UsersService {
     );
 
     await this.userRepository.update(id, { senha: hashedPassword });
+
+    if (requester) {
+      this.auditService.record({
+        actor: toAuditActor(requester),
+        action: AUDIT_ACTIONS.USER_PASSWORD_CHANGE,
+        category: 'user',
+        outcome: 'success',
+        resource: { type: 'usuario', id },
+      });
+    }
   }
 
   async changeOwnPassword(
@@ -435,12 +477,22 @@ export class UsersService {
 
     await this.userRepository.update(userId, { senha: hashedPassword });
     await this.refreshTokenService.revokeAllForUser(userId);
+
+    this.auditService.record({
+      actor: { userId, type: 'user' },
+      action: AUDIT_ACTIONS.USER_PASSWORD_CHANGE,
+      category: 'user',
+      outcome: 'success',
+      resource: { type: 'usuario', id: userId },
+      metadata: toAuditRecordMetadata([], { selfService: true }),
+    });
   }
 
   async updateRolesAndPermissions(
     id: number,
     regrasIds: number[],
     permissoesIds: number[],
+    requester?: { sub: number; email: string },
   ): Promise<void> {
     const user = await this.userRepository.findOne({
       where: { id },
@@ -452,6 +504,11 @@ export class UsersService {
     }
 
     this.assertUserNotBlocked(user);
+
+    const beforeRoles = {
+      regrasIds: (user.regra ?? []).map((regra) => Number(regra.id)),
+      permissoesIds: (user.permissao ?? []).map((permissao) => Number(permissao.id)),
+    };
 
     const regras = regrasIds.length
       ? await this.regraRepository.find({
@@ -479,11 +536,29 @@ export class UsersService {
     user.permissao = permissoes;
 
     await this.userRepository.save(user);
+
+    if (requester) {
+      this.auditService.record({
+        actor: toAuditActor(requester),
+        action: AUDIT_ACTIONS.USER_ROLES_UPDATE,
+        category: 'acl',
+        outcome: 'success',
+        resource: { type: 'usuario', id },
+        metadata: toAuditRecordMetadata(
+          buildAuditChanges(
+            beforeRoles,
+            { regrasIds, permissoesIds },
+            USUARIO_ROLES_AUDIT_PROFILE,
+          ),
+        ),
+      });
+    }
   }
 
   async copyRolesAndPermissions(
     idUsuario: number,
     idCopiado: number,
+    requester?: { sub: number; email: string },
   ): Promise<void> {
     if (idUsuario === idCopiado) {
       throw new BadRequestException(
@@ -493,6 +568,7 @@ export class UsersService {
 
     const target = await this.userRepository.findOne({
       where: { id: idUsuario },
+      relations: { regra: true, permissao: true },
     });
 
     if (!target) {
@@ -514,6 +590,10 @@ export class UsersService {
 
     const sourceRegras = source.regra ?? [];
     const sourcePermissoes = source.permissao ?? [];
+    const beforeRoles = {
+      regrasIds: (target.regra ?? []).map((regra) => Number(regra.id)),
+      permissoesIds: (target.permissao ?? []).map((permissao) => Number(permissao.id)),
+    };
 
     assertRolePermissionAssignment(
       sourceRegras,
@@ -531,6 +611,27 @@ export class UsersService {
     target.permissao = sourcePermissoes;
 
     await this.userRepository.save(target);
+
+    if (requester) {
+      this.auditService.record({
+        actor: toAuditActor(requester),
+        action: AUDIT_ACTIONS.USER_ROLES_UPDATE,
+        category: 'acl',
+        outcome: 'success',
+        resource: { type: 'usuario', id: idUsuario },
+        metadata: toAuditRecordMetadata(
+          buildAuditChanges(
+            beforeRoles,
+            {
+              regrasIds: sourceRegras.map((regra) => Number(regra.id)),
+              permissoesIds: sourcePermissoes.map((permissao) => Number(permissao.id)),
+            },
+            USUARIO_ROLES_AUDIT_PROFILE,
+          ),
+          { sourceUserId: idCopiado, copied: true },
+        ),
+      });
+    }
   }
 
   async deletePhoto(id: number): Promise<void> {
@@ -560,7 +661,10 @@ export class UsersService {
     }
   }
 
-  async delete(id: number): Promise<void> {
+  async delete(
+    id: number,
+    requester?: { sub: number; email: string },
+  ): Promise<void> {
     const user = await this.userRepository.findOne({
       where: { id },
       relations: { foto: true },
@@ -572,6 +676,7 @@ export class UsersService {
 
     const fotoId = user.foto?.id;
     const fotoLocal = user.foto?.local;
+    const deleteSnapshot = pickUsuarioAuditSnapshot(user);
 
     await this.userRepository.manager.transaction(async (manager) => {
       await manager.getRepository(Usuario).delete(id);
@@ -588,9 +693,27 @@ export class UsersService {
     ) {
       unlinkSync(fotoLocal);
     }
+
+    if (requester) {
+      this.auditService.record({
+        actor: toAuditActor(requester),
+        action: AUDIT_ACTIONS.USER_DELETE,
+        category: 'user',
+        outcome: 'success',
+        resource: { type: 'usuario', id },
+        metadata: toAuditRecordMetadata(
+          buildAuditDeleteChanges(deleteSnapshot, USUARIO_AUDIT_PROFILE),
+          { email: deleteSnapshot.email },
+        ),
+      });
+    }
   }
 
-  async copyDashboards(idUsuario: number, idCopiado: number): Promise<void> {
+  async copyDashboards(
+    idUsuario: number,
+    idCopiado: number,
+    requester?: { sub: number; email: string },
+  ): Promise<void> {
     if (idUsuario === idCopiado) {
       throw new BadRequestException(
         'Dashboards não podem ser copiados para o mesmo usuário',
@@ -621,6 +744,17 @@ export class UsersService {
     target.dashboard = source.dashboard ?? [];
 
     await this.userRepository.save(target);
+
+    if (requester) {
+      this.auditService.record({
+        actor: toAuditActor(requester),
+        action: AUDIT_ACTIONS.USER_DASHBOARDS_COPY,
+        category: 'acl',
+        outcome: 'success',
+        resource: { type: 'usuario', id: idUsuario },
+        metadata: toAuditRecordMetadata([], { sourceUserId: idCopiado }),
+      });
+    }
   }
 
   async updateFavorites(id: number, favoritos: number[]): Promise<void> {
@@ -765,7 +899,11 @@ export class UsersService {
     };
   }
 
-  async copyRelatorios(idUsuario: number, idCopiado: number): Promise<void> {
+  async copyRelatorios(
+    idUsuario: number,
+    idCopiado: number,
+    requester?: { sub: number; email: string },
+  ): Promise<void> {
     if (idUsuario === idCopiado) {
       throw new BadRequestException(
         'Relatórios não podem ser copiados para o mesmo usuário',
@@ -810,6 +948,17 @@ export class UsersService {
         await usuarioRelatorioRepository.save(copied);
       }
     });
+
+    if (requester) {
+      this.auditService.record({
+        actor: toAuditActor(requester),
+        action: AUDIT_ACTIONS.USER_RELATORIOS_COPY,
+        category: 'acl',
+        outcome: 'success',
+        resource: { type: 'usuario', id: idUsuario },
+        metadata: toAuditRecordMetadata([], { sourceUserId: idCopiado }),
+      });
+    }
   }
 
   async updateRelatorioFavorites(
@@ -1055,6 +1204,25 @@ export class UsersService {
       );
 
       const { senha, ...userWithoutPassword } = createdUser;
+
+      this.auditService.record({
+        actor: toAuditActor(requester),
+        action: AUDIT_ACTIONS.USER_CREATE,
+        category: 'user',
+        outcome: 'success',
+        resource: {
+          type: 'usuario',
+          id: toResourceId(createdUser.id),
+        },
+        metadata: toAuditRecordMetadata(
+          buildAuditCreateChanges(
+            pickUsuarioAuditSnapshot(createdUser),
+            USUARIO_AUDIT_PROFILE,
+          ),
+          { email: createdUser.email },
+        ),
+      });
+
       return userWithoutPassword;
     } catch (error) {
       if (foto?.path && existsSync(foto.path)) {

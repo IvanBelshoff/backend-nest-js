@@ -21,6 +21,21 @@ import { CreateAgendamentoDto } from './dto/create-agendamento.dto';
 import { UpdateAgendamentoDto } from './dto/update-agendamento.dto';
 import { CreateVinculoDto } from './dto/create-vinculo.dto';
 import { CreateReportSnapshotScheduleDto } from './dto/create-report-snapshot-schedule.dto';
+import { AuditService } from 'src/audit/audit.service';
+import { AUDIT_ACTIONS } from 'src/audit/constants/audit-actions';
+import { toAuditActor, toResourceId } from 'src/audit/utils/audit-actor.util';
+import {
+  buildAuditChanges,
+  buildAuditCreateChanges,
+  buildAuditDeleteChanges,
+} from 'src/audit/utils/build-audit-changes.util';
+import {
+  AGENDAMENTO_AUDIT_PROFILE,
+  VINCULO_AUDIT_PROFILE,
+  pickAgendamentoAuditSnapshot,
+  pickVinculoAuditSnapshot,
+} from 'src/audit/utils/audit-field-profiles';
+import { toAuditRecordMetadata } from 'src/audit/utils/audit-metadata.util';
 
 interface Requester {
   sub: number;
@@ -61,6 +76,7 @@ export class SchedulerService {
     @InjectRepository(Relatorio)
     private readonly relatorioRepository: Repository<Relatorio>,
     private readonly scheduleSyncService: ScheduleSyncService,
+    private readonly auditService: AuditService,
   ) {}
 
   async createAgendamento(
@@ -91,7 +107,19 @@ export class SchedulerService {
       usuarioAtualizador: usuarioNome ?? requester.email,
     });
 
-    return this.agendamentoRepository.save(agendamento);
+    const saved = await this.agendamentoRepository.save(agendamento);
+    this.auditService.record({
+      actor: toAuditActor(requester),
+      action: AUDIT_ACTIONS.SCHEDULER_CREATE,
+      category: 'scheduler',
+      outcome: 'success',
+      resource: { type: 'agendamento', id: toResourceId(saved.id) },
+      metadata: toAuditRecordMetadata(
+        buildAuditCreateChanges(pickAgendamentoAuditSnapshot(saved), AGENDAMENTO_AUDIT_PROFILE),
+        { nome: saved.nome },
+      ),
+    });
+    return saved;
   }
 
   async updateAgendamento(
@@ -107,6 +135,8 @@ export class SchedulerService {
     if (!agendamento) {
       throw new NotFoundException('Agendamento não localizado');
     }
+
+    const beforeSnapshot = pickAgendamentoAuditSnapshot(agendamento);
 
     if (dto.nome !== undefined) agendamento.nome = dto.nome;
     if (dto.ativo !== undefined) agendamento.ativo = dto.ativo;
@@ -144,10 +174,29 @@ export class SchedulerService {
       }
     }
 
+    this.auditService.record({
+      actor: toAuditActor(requester),
+      action: AUDIT_ACTIONS.SCHEDULER_UPDATE,
+      category: 'scheduler',
+      outcome: 'success',
+      resource: { type: 'agendamento', id },
+      metadata: toAuditRecordMetadata(
+        buildAuditChanges(
+          beforeSnapshot,
+          pickAgendamentoAuditSnapshot(saved),
+          AGENDAMENTO_AUDIT_PROFILE,
+        ),
+        { nome: saved.nome, ativo: saved.ativo },
+      ),
+    });
+
     return saved;
   }
 
-  async deleteAgendamento(id: number): Promise<void> {
+  async deleteAgendamento(
+    id: number,
+    requester?: { sub: number; email: string },
+  ): Promise<void> {
     const agendamento = await this.agendamentoRepository.findOne({
       where: { id },
       relations: { vinculos: true },
@@ -157,16 +206,33 @@ export class SchedulerService {
       throw new NotFoundException('Agendamento não localizado');
     }
 
+    const deleteSnapshot = pickAgendamentoAuditSnapshot(agendamento);
+
     for (const vinculo of agendamento.vinculos ?? []) {
       await this.scheduleSyncService.unsyncVinculo(vinculo);
     }
 
     await this.agendamentoRepository.remove(agendamento);
+
+    if (requester) {
+      this.auditService.record({
+        actor: toAuditActor(requester),
+        action: AUDIT_ACTIONS.SCHEDULER_DELETE,
+        category: 'scheduler',
+        outcome: 'success',
+        resource: { type: 'agendamento', id },
+        metadata: toAuditRecordMetadata(
+          buildAuditDeleteChanges(deleteSnapshot, AGENDAMENTO_AUDIT_PROFILE),
+          { nome: deleteSnapshot.nome },
+        ),
+      });
+    }
   }
 
   async createVinculo(
     agendamentoId: number,
     dto: CreateVinculoDto,
+    requester?: { sub: number; email: string },
   ): Promise<AgendamentoVinculo> {
     const agendamento = await this.agendamentoRepository.findOne({
       where: { id: agendamentoId },
@@ -207,10 +273,31 @@ export class SchedulerService {
       await this.scheduleSyncService.syncVinculo(vinculo);
     }
 
+    if (requester) {
+      this.auditService.record({
+        actor: toAuditActor(requester),
+        action: AUDIT_ACTIONS.SCHEDULER_VINCULO_CREATE,
+        category: 'scheduler',
+        outcome: 'success',
+        resource: { type: 'agendamento_vinculo', id: toResourceId(vinculo.id) },
+        metadata: toAuditRecordMetadata(
+          buildAuditCreateChanges(pickVinculoAuditSnapshot(vinculo), VINCULO_AUDIT_PROFILE),
+          {
+            agendamentoId,
+            entidadeTipo: dto.entidade_tipo,
+            entidadeId: dto.entidade_id,
+          },
+        ),
+      });
+    }
+
     return vinculo;
   }
 
-  async deleteVinculo(vinculoId: number): Promise<void> {
+  async deleteVinculo(
+    vinculoId: number,
+    requester?: { sub: number; email: string },
+  ): Promise<void> {
     const vinculo = await this.vinculoRepository.findOne({
       where: { id: vinculoId },
     });
@@ -219,8 +306,23 @@ export class SchedulerService {
       throw new NotFoundException('Vínculo não localizado');
     }
 
+    const deleteSnapshot = pickVinculoAuditSnapshot(vinculo);
+
     await this.scheduleSyncService.unsyncVinculo(vinculo);
     await this.vinculoRepository.remove(vinculo);
+
+    if (requester) {
+      this.auditService.record({
+        actor: toAuditActor(requester),
+        action: AUDIT_ACTIONS.SCHEDULER_VINCULO_DELETE,
+        category: 'scheduler',
+        outcome: 'success',
+        resource: { type: 'agendamento_vinculo', id: vinculoId },
+        metadata: toAuditRecordMetadata(
+          buildAuditDeleteChanges(deleteSnapshot, VINCULO_AUDIT_PROFILE),
+        ),
+      });
+    }
   }
 
   async listVinculos(filters: {
@@ -321,6 +423,18 @@ export class SchedulerService {
         parametros_snapshot: dto.parametros_snapshot,
       },
       ativo: dto.ativo,
+    }, requester);
+
+    this.auditService.record({
+      actor: toAuditActor(requester),
+      action: AUDIT_ACTIONS.REPORT_SNAPSHOT_SCHEDULE_CREATE,
+      category: 'scheduler',
+      outcome: 'success',
+      resource: { type: 'relatorio', id: relatorioId },
+      metadata: toAuditRecordMetadata(
+        buildAuditCreateChanges(pickVinculoAuditSnapshot(vinculo), VINCULO_AUDIT_PROFILE),
+        { agendamentoId: agendamento.id, vinculoId: vinculo.id },
+      ),
     });
 
     return { agendamento, vinculo };
@@ -351,7 +465,10 @@ export class SchedulerService {
     return { agendamento, vinculo };
   }
 
-  async deleteReportSnapshotSchedule(relatorioId: number): Promise<void> {
+  async deleteReportSnapshotSchedule(
+    relatorioId: number,
+    requester?: { sub: number; email: string },
+  ): Promise<void> {
     const vinculo = await this.findVinculoByEntity(
       'relatorio',
       relatorioId,
@@ -363,7 +480,7 @@ export class SchedulerService {
     }
 
     const agendamentoId = vinculo.agendamentoId;
-    await this.deleteVinculo(vinculo.id);
+    await this.deleteVinculo(vinculo.id, requester);
 
     const remaining = await this.vinculoRepository.count({
       where: { agendamentoId },
@@ -371,6 +488,16 @@ export class SchedulerService {
 
     if (remaining === 0) {
       await this.agendamentoRepository.delete(agendamentoId);
+    }
+
+    if (requester) {
+      this.auditService.record({
+        actor: toAuditActor(requester),
+        action: AUDIT_ACTIONS.REPORT_SNAPSHOT_SCHEDULE_DELETE,
+        category: 'scheduler',
+        outcome: 'success',
+        resource: { type: 'relatorio', id: relatorioId },
+      });
     }
   }
 

@@ -130,6 +130,9 @@ export const AUTH_ENDPOINT_MATRIX = {
     'GET /admin/metrics/history': { role: ['REGRA_ADMIN'] },
     'GET /admin/jobs': { role: ['REGRA_ADMIN'] },
     'GET /admin/jobs/schedules': { role: ['REGRA_ADMIN'] },
+    'GET /admin/audit': { role: ['REGRA_ADMIN'] },
+    'GET /admin/audit/:id': { role: ['REGRA_ADMIN'] },
+    'GET /admin/audit/meta/actions': { role: ['REGRA_ADMIN'] },
   },
   ai: {
     'GET /ai/access': { role: ['REGRA_IA'] },

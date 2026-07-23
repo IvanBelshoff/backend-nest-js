@@ -21,6 +21,10 @@ describe('AuthService', () => {
     revoke: jest.fn().mockResolvedValue(undefined),
   };
 
+  const auditService = {
+    record: jest.fn(),
+  };
+
   beforeEach(() => {
     jest.clearAllMocks();
   });
@@ -40,6 +44,7 @@ describe('AuthService', () => {
       usersService as any,
       jwtService as any,
       refreshTokenService as any,
+      auditService as any,
     );
 
     await expect(
@@ -47,6 +52,8 @@ describe('AuthService', () => {
     ).resolves.toEqual({
       access_token: 'jwt-token',
       expires_in: jwtConstants.expiresInSeconds,
+      regras: [],
+      permissoes: [],
       refreshToken: {
         rawToken: 'refresh-raw',
         expiresAt: new Date('2030-01-01'),
@@ -58,6 +65,9 @@ describe('AuthService', () => {
     });
     expect(refreshTokenService.issue).toHaveBeenCalledWith(1);
     expect(usersService.updateUltimoLogin).toHaveBeenCalledWith(1);
+    expect(auditService.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'auth.login.success' }),
+    );
   });
 
   it('throws UnauthorizedException when the password does not match', async () => {
@@ -75,11 +85,15 @@ describe('AuthService', () => {
       usersService as any,
       jwtService as any,
       refreshTokenService as any,
+      auditService as any,
     );
 
     await expect(
       service.signIn('ivan@example.com', 'senha-incorreta'),
     ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(auditService.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'auth.login.failure' }),
+    );
     expect(jwtService.signAsync).not.toHaveBeenCalled();
     expect(refreshTokenService.issue).not.toHaveBeenCalled();
   });
@@ -99,6 +113,7 @@ describe('AuthService', () => {
       usersService as any,
       jwtService as any,
       refreshTokenService as any,
+      auditService as any,
     );
 
     await expect(
@@ -119,11 +134,14 @@ describe('AuthService', () => {
       usersService as any,
       jwtService as any,
       refreshTokenService as any,
+      auditService as any,
     );
 
     await expect(service.refresh('old-refresh-token')).resolves.toEqual({
       access_token: 'jwt-token',
       expires_in: jwtConstants.expiresInSeconds,
+      regras: [],
+      permissoes: [],
       refreshToken: {
         rawToken: 'new-refresh-raw',
         expiresAt: new Date('2030-01-01'),
@@ -144,6 +162,7 @@ describe('AuthService', () => {
       usersService as any,
       jwtService as any,
       refreshTokenService as any,
+      auditService as any,
     );
 
     await expect(service.refresh('old-refresh-token')).rejects.toBeInstanceOf(
@@ -158,6 +177,7 @@ describe('AuthService', () => {
       {} as any,
       jwtService as any,
       refreshTokenService as any,
+      auditService as any,
     );
 
     await service.logout('refresh-token');

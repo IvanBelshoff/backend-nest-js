@@ -32,6 +32,21 @@ import { resolvePermitirConhecimentoIa } from './report-ai-knowledge.util';
 import { UsuarioRelatorioAccessService } from './usuario-relatorio-access.service';
 import { SchedulerService } from 'src/scheduler/scheduler.service';
 import { AgendamentoVinculoTipo } from 'src/scheduler/entities/scheduler.enums';
+import { AuditService } from 'src/audit/audit.service';
+import { AUDIT_ACTIONS } from 'src/audit/constants/audit-actions';
+import { toAuditActor, toResourceId } from 'src/audit/utils/audit-actor.util';
+import {
+  buildAuditChanges,
+  buildAuditCreateChanges,
+  buildAuditDeleteChanges,
+} from 'src/audit/utils/build-audit-changes.util';
+import {
+  ACL_USUARIO_IDS_AUDIT_PROFILE,
+  RELATORIO_AUDIT_PROFILE,
+  pickRelatorioAuditSnapshot,
+  pickUsuarioIdsAuditSnapshot,
+} from 'src/audit/utils/audit-field-profiles';
+import { toAuditRecordMetadata } from 'src/audit/utils/audit-metadata.util';
 
 interface Requester {
   sub: number;
@@ -74,6 +89,7 @@ export class ReportService {
     private readonly reportSnapshotService: ReportSnapshotService,
     private readonly schedulerService: SchedulerService,
     private readonly usuarioRelatorioAccessService: UsuarioRelatorioAccessService,
+    private readonly auditService: AuditService,
   ) {}
 
   async create(dto: CreateReportDto, requester: Requester): Promise<Relatorio> {
@@ -131,6 +147,18 @@ export class ReportService {
         permitirConhecimentoIa: false,
       });
     }
+
+    this.auditService.record({
+      actor: toAuditActor(requester),
+      action: AUDIT_ACTIONS.REPORT_CREATE,
+      category: 'report',
+      outcome: 'success',
+      resource: { type: 'relatorio', id: toResourceId(saved.id) },
+      metadata: toAuditRecordMetadata(
+        buildAuditCreateChanges(pickRelatorioAuditSnapshot(saved), RELATORIO_AUDIT_PROFILE),
+        { nome: saved.nome },
+      ),
+    });
 
     return saved;
   }
@@ -347,6 +375,8 @@ export class ReportService {
       relatorio.snapshot_valido = false;
     }
 
+    const beforeSnapshot = pickRelatorioAuditSnapshot(relatorio);
+
     relatorio.nome = dto.nome ?? relatorio.nome;
     relatorio.icone = dto.icone ?? relatorio.icone;
     relatorio.query = dto.query ?? relatorio.query;
@@ -397,6 +427,22 @@ export class ReportService {
     if (saved.privacidade === Privacidade.PRIVAT) {
       await this.usuarioRelatorioAccessService.ensureOwnerGrant(Number(saved.id));
     }
+
+    this.auditService.record({
+      actor: toAuditActor(requester),
+      action: AUDIT_ACTIONS.REPORT_UPDATE,
+      category: 'report',
+      outcome: 'success',
+      resource: { type: 'relatorio', id },
+      metadata: toAuditRecordMetadata(
+        buildAuditChanges(
+          beforeSnapshot,
+          pickRelatorioAuditSnapshot(saved),
+          RELATORIO_AUDIT_PROFILE,
+        ),
+        { nome: saved.nome, estado: saved.estado },
+      ),
+    });
 
     return { relatorio: saved, shouldGenerateSnapshot };
   }
@@ -506,7 +552,11 @@ export class ReportService {
   async assignUsers(
     relatorioId: number,
     usuarios: Array<{ id: number }>,
+    requester?: { sub: number; email: string },
   ): Promise<void> {
+    let beforeUsuarioIds: number[] = [];
+    let afterUsuarioIds: number[] = [];
+
     await this.relatorioRepository.manager.transaction(async (manager) => {
       const relatorioRepository = manager.getRepository(Relatorio);
       const userRepository = manager.getRepository(Usuario);
@@ -521,6 +571,10 @@ export class ReportService {
       if (!relatorio) {
         throw new NotFoundException('Relatório não localizado');
       }
+
+      beforeUsuarioIds = (relatorio.usuarioRelatorios ?? []).map((grant) =>
+        Number(grant.usuarioId),
+      );
 
       const usuarioIds = usuarios.map((item) => item.id);
 
@@ -576,10 +630,34 @@ export class ReportService {
           })),
         );
       }
+
+      afterUsuarioIds = usuarios.map((item) => item.id);
     });
+
+    if (requester) {
+      this.auditService.record({
+        actor: toAuditActor(requester),
+        action: AUDIT_ACTIONS.REPORT_ACL_ASSIGN,
+        category: 'acl',
+        outcome: 'success',
+        resource: { type: 'relatorio', id: relatorioId },
+        metadata: toAuditRecordMetadata(
+          buildAuditChanges(
+            pickUsuarioIdsAuditSnapshot(beforeUsuarioIds),
+            pickUsuarioIdsAuditSnapshot(afterUsuarioIds),
+            ACL_USUARIO_IDS_AUDIT_PROFILE,
+          ),
+        ),
+      });
+    }
   }
 
-  async delete(id: number): Promise<void> {
+  async delete(
+    id: number,
+    requester?: { sub: number; email: string },
+  ): Promise<void> {
+    let deleteSnapshot: Record<string, unknown> = {};
+
     await this.relatorioRepository.manager.transaction(async (manager) => {
       const relatorioRepository = manager.getRepository(Relatorio);
       const userRepository = manager.getRepository(Usuario);
@@ -592,6 +670,8 @@ export class ReportService {
       if (!relatorio) {
         throw new NotFoundException('Relatório não localizado');
       }
+
+      deleteSnapshot = pickRelatorioAuditSnapshot(relatorio);
 
       for (const grant of relatorio.usuarioRelatorios ?? []) {
         const user = grant.usuario;
@@ -609,6 +689,20 @@ export class ReportService {
     });
 
     await this.reportSnapshotService.deleteSnapshot(id);
+
+    if (requester) {
+      this.auditService.record({
+        actor: toAuditActor(requester),
+        action: AUDIT_ACTIONS.REPORT_DELETE,
+        category: 'report',
+        outcome: 'success',
+        resource: { type: 'relatorio', id },
+        metadata: toAuditRecordMetadata(
+          buildAuditDeleteChanges(deleteSnapshot, RELATORIO_AUDIT_PROFILE),
+          { nome: deleteSnapshot.nome },
+        ),
+      });
+    }
   }
 
   private async findAccessibleById(

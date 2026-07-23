@@ -183,10 +183,15 @@ export class UsersController {
     { type: 'permission', required: ['PERMISSAO_CRIAR_USUARIO'] },
   )
   @ZodValidation(copyAuthenticationSchema)
-  async copyAuthentication(@Body() dto: CopyAuthenticationDto) {
+  async copyAuthentication(
+    @Body() dto: CopyAuthenticationDto,
+    @Request() req: UserRequest.UserRequest,
+  ) {
+    if (!req.user) throw new UnauthorizedException();
     await this.usersService.copyRolesAndPermissions(
       dto.id_usuario,
       dto.id_copiado,
+      req.user,
     );
   }
 
@@ -197,8 +202,16 @@ export class UsersController {
   )
   @ZodValidation(copyDashboardsSchema)
   @HttpCode(204)
-  async copyDashboards(@Body() dto: CopyDashboardsDto) {
-    await this.usersService.copyDashboards(dto.id_usuario, dto.id_copiado);
+  async copyDashboards(
+    @Body() dto: CopyDashboardsDto,
+    @Request() req: UserRequest.UserRequest,
+  ) {
+    if (!req.user) throw new UnauthorizedException();
+    await this.usersService.copyDashboards(
+      dto.id_usuario,
+      dto.id_copiado,
+      req.user,
+    );
   }
 
   @Patch('/copy/relatorios')
@@ -208,8 +221,16 @@ export class UsersController {
   )
   @ZodValidation(copyRelatoriosSchema)
   @HttpCode(204)
-  async copyRelatorios(@Body() dto: CopyRelatoriosDto) {
-    await this.usersService.copyRelatorios(dto.id_usuario, dto.id_copiado);
+  async copyRelatorios(
+    @Body() dto: CopyRelatoriosDto,
+    @Request() req: UserRequest.UserRequest,
+  ) {
+    if (!req.user) throw new UnauthorizedException();
+    await this.usersService.copyRelatorios(
+      dto.id_usuario,
+      dto.id_copiado,
+      req.user,
+    );
   }
 
   @Patch('/preferences/:id')
@@ -282,11 +303,14 @@ export class UsersController {
   async updateUserReportAiKnowledge(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateUserReportAiKnowledgeDto,
+    @Request() req: UserRequest.UserRequest,
   ) {
+    if (!req.user) throw new UnauthorizedException();
     await this.usuarioRelatorioAccessService.updatePermitirConhecimentoIa(
       id,
       dto.relatorioId,
       dto.permitirConhecimentoIa,
+      req.user,
     );
   }
 
@@ -296,11 +320,14 @@ export class UsersController {
   async updateAuthentication(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateAuthenticationDto,
+    @Request() req: UserRequest.UserRequest,
   ) {
+    if (!req.user) throw new UnauthorizedException();
     await this.usersService.updateRolesAndPermissions(
       id,
       dto.regras,
       dto.permissoes,
+      req.user,
     );
   }
 
@@ -310,8 +337,10 @@ export class UsersController {
   async updatePassword(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdatePasswordDto,
+    @Request() req: UserRequest.UserRequest,
   ) {
-    await this.usersService.updatePassword(id, dto.senha);
+    if (!req.user) throw new UnauthorizedException();
+    await this.usersService.updatePassword(id, dto.senha, req.user);
   }
 
   @Patch('/:id')
@@ -341,7 +370,11 @@ export class UsersController {
   @Delete('/:id')
   @Authorization('permission', ['PERMISSAO_EXCLUIR_USUARIO'])
   @HttpCode(204)
-  async delete(@Param('id', ParseIntPipe) id: number) {
-    await this.usersService.delete(id);
+  async delete(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: UserRequest.UserRequest,
+  ) {
+    if (!req.user) throw new UnauthorizedException();
+    await this.usersService.delete(id, req.user);
   }
 }

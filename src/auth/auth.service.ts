@@ -11,6 +11,10 @@ import {
 import type { Usuario } from 'src/database/entities/Usuarios';
 import type { UsuarioPreferenciasUi } from 'src/user/types/usuario-preferencias-ui.types';
 import { resolveUsuarioPreferenciasUi } from 'src/user/usuario-preferencias-ui.util';
+import { AuditService } from 'src/audit/audit.service';
+import { AUDIT_ACTIONS } from 'src/audit/constants/audit-actions';
+import type { AuditHttpContext } from 'src/audit/types/audit.types';
+import { toAuditRecordMetadata } from 'src/audit/utils/audit-metadata.util';
 
 export interface AuthSessionResult {
   access_token: string;
@@ -37,9 +41,14 @@ export class AuthService {
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
     private readonly refreshTokenService: RefreshTokenService,
+    private readonly auditService: AuditService,
   ) {}
 
-  async signIn(email: string, pass: string): Promise<AuthSessionResult> {
+  async signIn(
+    email: string,
+    pass: string,
+    http?: AuditHttpContext,
+  ): Promise<AuthSessionResult> {
     const user = await this.usersService.findOne(email);
 
     const isPasswordValid = user?.senha
@@ -47,10 +56,26 @@ export class AuthService {
       : false;
 
     if (!user || !isPasswordValid) {
+      this.auditService.record({
+        actor: { type: 'anonymous', email },
+        action: AUDIT_ACTIONS.AUTH_LOGIN_FAILURE,
+        category: 'auth',
+        outcome: 'failure',
+        http,
+        metadata: toAuditRecordMetadata([], { attemptedEmail: email }),
+      });
       throw new UnauthorizedException();
     }
 
     if (user.bloqueado) {
+      this.auditService.record({
+        actor: { type: 'anonymous', email },
+        action: AUDIT_ACTIONS.AUTH_LOGIN_FAILURE,
+        category: 'auth',
+        outcome: 'denied',
+        http,
+        metadata: toAuditRecordMetadata([], { attemptedEmail: email, reason: 'blocked' }),
+      });
       throw new UnauthorizedException();
     }
 
@@ -59,6 +84,15 @@ export class AuthService {
 
     const payload = { sub: user.id, email: user.email };
     const rbac = mapUserRbac(user);
+
+    this.auditService.record({
+      actor: { userId: Number(user.id), email: user.email, type: 'user' },
+      action: AUDIT_ACTIONS.AUTH_LOGIN_SUCCESS,
+      category: 'auth',
+      outcome: 'success',
+      resource: { type: 'usuario', id: Number(user.id) },
+      http,
+    });
 
     return {
       access_token: await this.jwtService.signAsync(payload),
@@ -109,11 +143,26 @@ export class AuthService {
     };
   }
 
-  async logout(rawRefreshToken: string | undefined): Promise<void> {
+  async logout(
+    rawRefreshToken: string | undefined,
+    actor?: { sub: number; email: string },
+    http?: AuditHttpContext,
+  ): Promise<void> {
     if (!rawRefreshToken) {
       return;
     }
 
     await this.refreshTokenService.revoke(rawRefreshToken);
+
+    this.auditService.record({
+      actor: actor
+        ? { userId: actor.sub, email: actor.email, type: 'user' }
+        : { type: 'anonymous' },
+      action: AUDIT_ACTIONS.AUTH_LOGOUT,
+      category: 'auth',
+      outcome: 'success',
+      resource: actor ? { type: 'usuario', id: actor.sub } : null,
+      http,
+    });
   }
 }

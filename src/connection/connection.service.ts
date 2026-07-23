@@ -13,6 +13,9 @@ import {
   encryptConnectionPassword,
 } from 'src/shared/utils/connection-encryption.util';
 import { testConnection } from 'src/report/execution/dynamic-connection.factory';
+import { AuditService } from 'src/audit/audit.service';
+import { AUDIT_ACTIONS } from 'src/audit/constants/audit-actions';
+import { toAuditActor, toResourceId } from 'src/audit/utils/audit-actor.util';
 
 interface Requester {
   sub: number;
@@ -31,6 +34,7 @@ export class ConnectionService {
   constructor(
     @InjectRepository(Conexao)
     private readonly connectionRepository: Repository<Conexao>,
+    private readonly auditService: AuditService,
   ) {}
 
   async create(dto: CreateConnectionDto, requester: Requester): Promise<Conexao> {
@@ -56,6 +60,14 @@ export class ConnectionService {
     });
 
     const saved = await this.connectionRepository.save(connection);
+    this.auditService.record({
+      actor: toAuditActor(requester),
+      action: AUDIT_ACTIONS.CONNECTION_CREATE,
+      category: 'connection',
+      outcome: 'success',
+      resource: { type: 'conexao', id: toResourceId(saved.id) },
+      metadata: { nome: saved.nome, tipo: saved.tipo },
+    });
     return this.sanitize(saved);
   }
 
@@ -131,20 +143,46 @@ export class ConnectionService {
     connection.usuario_atualizador = requester.email;
 
     const saved = await this.connectionRepository.save(connection);
+    this.auditService.record({
+      actor: toAuditActor(requester),
+      action: AUDIT_ACTIONS.CONNECTION_UPDATE,
+      category: 'connection',
+      outcome: 'success',
+      resource: { type: 'conexao', id },
+      metadata: { nome: saved.nome },
+    });
     return this.sanitize(saved);
   }
 
-  async delete(id: number): Promise<void> {
+  async delete(
+    id: number,
+    requester?: { sub: number; email: string },
+  ): Promise<void> {
     const connection = await this.connectionRepository.findOne({ where: { id } });
 
     if (!connection) {
       throw new NotFoundException('Conexão não localizada');
     }
 
+    const nome = connection.nome;
     await this.connectionRepository.delete({ id });
+
+    if (requester) {
+      this.auditService.record({
+        actor: toAuditActor(requester),
+        action: AUDIT_ACTIONS.CONNECTION_DELETE,
+        category: 'connection',
+        outcome: 'success',
+        resource: { type: 'conexao', id },
+        metadata: { nome },
+      });
+    }
   }
 
-  async test(id: number): Promise<{ ok: true }> {
+  async test(
+    id: number,
+    requester?: { sub: number; email: string },
+  ): Promise<{ ok: true }> {
     const connection = await this.connectionRepository.findOne({ where: { id } });
 
     if (!connection) {
@@ -152,6 +190,18 @@ export class ConnectionService {
     }
 
     await testConnection(connection);
+
+    if (requester) {
+      this.auditService.record({
+        actor: toAuditActor(requester),
+        action: AUDIT_ACTIONS.CONNECTION_TEST,
+        category: 'connection',
+        outcome: 'success',
+        resource: { type: 'conexao', id },
+        metadata: { nome: connection.nome },
+      });
+    }
+
     return { ok: true };
   }
 

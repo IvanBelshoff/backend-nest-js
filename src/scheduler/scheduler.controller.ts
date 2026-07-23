@@ -76,8 +76,12 @@ export class SchedulerController {
   )
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Remover agendamento e vínculos' })
-  async remove(@Param('id', ParseIntPipe) id: number): Promise<void> {
-    await this.schedulerService.deleteAgendamento(id);
+  async remove(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: UserRequest.UserRequest,
+  ): Promise<void> {
+    if (!req.user) throw new UnauthorizedException();
+    await this.schedulerService.deleteAgendamento(id, req.user);
   }
 
   @Post('/:id/vinculos')
@@ -90,8 +94,10 @@ export class SchedulerController {
   createVinculo(
     @Param('id', ParseIntPipe) agendamentoId: number,
     @Body() dto: CreateVinculoDto,
+    @Request() req: UserRequest.UserRequest,
   ) {
-    return this.schedulerService.createVinculo(agendamentoId, dto);
+    if (!req.user) throw new UnauthorizedException();
+    return this.schedulerService.createVinculo(agendamentoId, dto, req.user);
   }
 
   @Delete('/vinculos/:vinculoId')
@@ -103,8 +109,10 @@ export class SchedulerController {
   @ApiOperation({ summary: 'Remover vínculo de agendamento' })
   async removeVinculo(
     @Param('vinculoId', ParseIntPipe) vinculoId: number,
+    @Request() req: UserRequest.UserRequest,
   ): Promise<void> {
-    await this.schedulerService.deleteVinculo(vinculoId);
+    if (!req.user) throw new UnauthorizedException();
+    await this.schedulerService.deleteVinculo(vinculoId, req.user);
   }
 
   @Get('/vinculos')

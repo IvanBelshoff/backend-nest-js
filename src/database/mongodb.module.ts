@@ -5,8 +5,6 @@ import {
   RelatorioSnapshot,
   RelatorioSnapshotSchema,
 } from '../report/schemas/relatorio-snapshot.schema';
-import { AppLog, AppLogSchema } from '../report/schemas/app-log.schema';
-import { AppLogService } from '../report/app-log.service';
 
 @Global()
 @Module({
@@ -16,10 +14,8 @@ import { AppLogService } from '../report/app-log.service';
     }),
     MongooseModule.forFeature([
       { name: RelatorioSnapshot.name, schema: RelatorioSnapshotSchema },
-      { name: AppLog.name, schema: AppLogSchema },
     ]),
   ],
-  providers: [AppLogService],
-  exports: [MongooseModule, AppLogService],
+  exports: [MongooseModule],
 })
 export class MongodbModule {}

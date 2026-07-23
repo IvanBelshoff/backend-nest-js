@@ -11,6 +11,21 @@ import { Dashboard, Privacidade } from 'src/database/entities/Dashboards';
 import { Usuario } from 'src/database/entities/Usuarios';
 import { CreateDashboardDto } from './dto/create-dashboard.dto';
 import { UpdateDashboardDto } from './dto/update-dashboard.dto';
+import { AuditService } from 'src/audit/audit.service';
+import { AUDIT_ACTIONS } from 'src/audit/constants/audit-actions';
+import { toAuditActor, toResourceId } from 'src/audit/utils/audit-actor.util';
+import {
+  buildAuditChanges,
+  buildAuditCreateChanges,
+  buildAuditDeleteChanges,
+} from 'src/audit/utils/build-audit-changes.util';
+import {
+  ACL_USUARIO_IDS_AUDIT_PROFILE,
+  DASHBOARD_AUDIT_PROFILE,
+  pickDashboardAuditSnapshot,
+  pickUsuarioIdsAuditSnapshot,
+} from 'src/audit/utils/audit-field-profiles';
+import { toAuditRecordMetadata } from 'src/audit/utils/audit-metadata.util';
 
 interface Requester {
   sub: number;
@@ -59,6 +74,7 @@ export class DashboardService {
     private dashboardRepository: Repository<Dashboard>,
     @InjectRepository(Usuario)
     private userRepository: Repository<Usuario>,
+    private readonly auditService: AuditService,
   ) {}
 
   async create(
@@ -106,7 +122,19 @@ export class DashboardService {
       usuario: owner ? [owner] : [],
     });
 
-    return this.dashboardRepository.save(dashboard);
+    const saved = await this.dashboardRepository.save(dashboard);
+    this.auditService.record({
+      actor: toAuditActor(requester),
+      action: AUDIT_ACTIONS.DASHBOARD_CREATE,
+      category: 'dashboard',
+      outcome: 'success',
+      resource: { type: 'dashboard', id: toResourceId(saved.id) },
+      metadata: toAuditRecordMetadata(
+        buildAuditCreateChanges(pickDashboardAuditSnapshot(saved), DASHBOARD_AUDIT_PROFILE),
+        { nome: saved.nome },
+      ),
+    });
+    return saved;
   }
 
   async findAllPaginated(
@@ -418,6 +446,7 @@ export class DashboardService {
     }
 
     const novoTemporario = dto.temporario ?? dashboard.temporario;
+    const beforeSnapshot = pickDashboardAuditSnapshot(dashboard);
 
     dashboard.nome = dto.nome ?? dashboard.nome;
     dashboard.url = dto.url ?? dashboard.url;
@@ -437,7 +466,23 @@ export class DashboardService {
       ? `${user.nome} ${user.sobrenome}`
       : dashboard.usuario_atualizador;
 
-    return this.dashboardRepository.save(dashboard);
+    const saved = await this.dashboardRepository.save(dashboard);
+    this.auditService.record({
+      actor: toAuditActor(requester),
+      action: AUDIT_ACTIONS.DASHBOARD_UPDATE,
+      category: 'dashboard',
+      outcome: 'success',
+      resource: { type: 'dashboard', id },
+      metadata: toAuditRecordMetadata(
+        buildAuditChanges(
+          beforeSnapshot,
+          pickDashboardAuditSnapshot(saved),
+          DASHBOARD_AUDIT_PROFILE,
+        ),
+        { nome: saved.nome },
+      ),
+    });
+    return saved;
   }
 
   async getDashboardsByUser(userId: number): Promise<{
@@ -489,7 +534,14 @@ export class DashboardService {
     };
   }
 
-  async assignUsers(dashboardId: number, usuarios: number[]): Promise<void> {
+  async assignUsers(
+    dashboardId: number,
+    usuarios: number[],
+    requester?: { sub: number; email: string },
+  ): Promise<void> {
+    let beforeUsuarioIds: number[] = [];
+    let afterUsuarioIds: number[] = [];
+
     await this.dashboardRepository.manager.transaction(async (manager) => {
       const dashboardRepository = manager.getRepository(Dashboard);
       const userRepository = manager.getRepository(Usuario);
@@ -502,6 +554,8 @@ export class DashboardService {
       if (!dashboard) {
         throw new NotFoundException('Dashboard não localizado');
       }
+
+      beforeUsuarioIds = (dashboard.usuario ?? []).map((user) => Number(user.id));
 
       if (
         dashboard.id_proprietario &&
@@ -541,10 +595,33 @@ export class DashboardService {
       dashboard.usuario = users;
 
       await dashboardRepository.save(dashboard);
+      afterUsuarioIds = users.map((user) => Number(user.id));
     });
+
+    if (requester) {
+      this.auditService.record({
+        actor: toAuditActor(requester),
+        action: AUDIT_ACTIONS.DASHBOARD_ACL_ASSIGN,
+        category: 'acl',
+        outcome: 'success',
+        resource: { type: 'dashboard', id: dashboardId },
+        metadata: toAuditRecordMetadata(
+          buildAuditChanges(
+            pickUsuarioIdsAuditSnapshot(beforeUsuarioIds),
+            pickUsuarioIdsAuditSnapshot(afterUsuarioIds),
+            ACL_USUARIO_IDS_AUDIT_PROFILE,
+          ),
+        ),
+      });
+    }
   }
 
-  async delete(id: number): Promise<void> {
+  async delete(
+    id: number,
+    requester?: { sub: number; email: string },
+  ): Promise<void> {
+    let deleteSnapshot: Record<string, unknown> = {};
+
     await this.dashboardRepository.manager.transaction(async (manager) => {
       const dashboardRepository = manager.getRepository(Dashboard);
       const userRepository = manager.getRepository(Usuario);
@@ -557,6 +634,8 @@ export class DashboardService {
       if (!dashboard) {
         throw new NotFoundException('Dashboard não localizado');
       }
+
+      deleteSnapshot = pickDashboardAuditSnapshot(dashboard);
 
       for (const user of dashboard.usuario ?? []) {
         if (user.dashboards_favoritos?.includes(id)) {
@@ -572,6 +651,20 @@ export class DashboardService {
 
       await dashboardRepository.delete({ id });
     });
+
+    if (requester) {
+      this.auditService.record({
+        actor: toAuditActor(requester),
+        action: AUDIT_ACTIONS.DASHBOARD_DELETE,
+        category: 'dashboard',
+        outcome: 'success',
+        resource: { type: 'dashboard', id },
+        metadata: toAuditRecordMetadata(
+          buildAuditDeleteChanges(deleteSnapshot, DASHBOARD_AUDIT_PROFILE),
+          { nome: deleteSnapshot.nome },
+        ),
+      });
+    }
   }
 
   private baseQuery(): SelectQueryBuilder<Dashboard> {

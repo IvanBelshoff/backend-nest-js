@@ -72,6 +72,10 @@ import {
 } from 'src/scheduler/dto/create-report-snapshot-schedule.dto';
 import { AgendamentoVinculoTipo } from 'src/scheduler/entities/scheduler.enums';
 import { ApiBearerAuth, ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { AuditService } from 'src/audit/audit.service';
+import { AUDIT_ACTIONS } from 'src/audit/constants/audit-actions';
+import { toAuditActor } from 'src/audit/utils/audit-actor.util';
+import { toAuditRecordMetadata } from 'src/audit/utils/audit-metadata.util';
 
 @Controller('relatorios')
 @ApiTags('relatorios')
@@ -85,6 +89,7 @@ export class ReportController {
     private readonly reportJobService: ReportJobService,
     private readonly schedulerService: SchedulerService,
     private readonly usuarioRelatorioAccessService: UsuarioRelatorioAccessService,
+    private readonly auditService: AuditService,
   ) {}
 
   @Post('/')
@@ -197,7 +202,18 @@ export class ReportController {
       );
     }
 
-    return this.reportExecutionService.execute(id, dto.parametros);
+    const result = await this.reportExecutionService.execute(id, dto.parametros);
+
+    this.auditService.record({
+      actor: toAuditActor(req.user),
+      action: AUDIT_ACTIONS.REPORT_EXECUTE,
+      category: 'report',
+      outcome: 'success',
+      resource: { type: 'relatorio', id },
+      metadata: toAuditRecordMetadata([], { parametros: dto.parametros }),
+    });
+
+    return result;
   }
 
   @Get('/:id/dados')
@@ -342,8 +358,12 @@ export class ReportController {
   @Delete('/:id/agendamento-snapshot')
   @Authorization('permission', ['PERMISSAO_ATUALIZAR_RELATORIO'])
   @HttpCode(HttpStatus.NO_CONTENT)
-  async deleteSnapshotSchedule(@Param('id', ParseIntPipe) id: number) {
-    await this.schedulerService.deleteReportSnapshotSchedule(id);
+  async deleteSnapshotSchedule(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: UserRequest.UserRequest,
+  ) {
+    if (!req.user) throw new UnauthorizedException();
+    await this.schedulerService.deleteReportSnapshotSchedule(id, req.user);
   }
 
   @Get('/:id/agendamento-snapshot/execucoes')
@@ -382,8 +402,10 @@ export class ReportController {
   async assignUsers(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: AssignReportUsersDto,
+    @Request() req: UserRequest.UserRequest,
   ) {
-    await this.reportService.assignUsers(id, dto.usuarios);
+    if (!req.user) throw new UnauthorizedException();
+    await this.reportService.assignUsers(id, dto.usuarios, req.user);
   }
 
   @Patch('/:id/permitir-conhecimento-ia')
@@ -393,11 +415,14 @@ export class ReportController {
   async updateReportUserAiKnowledge(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateReportUserAiKnowledgeDto,
+    @Request() req: UserRequest.UserRequest,
   ) {
+    if (!req.user) throw new UnauthorizedException();
     await this.usuarioRelatorioAccessService.updatePermitirConhecimentoIa(
       dto.usuarioId,
       id,
       dto.permitirConhecimentoIa,
+      req.user,
     );
   }
 
@@ -445,7 +470,11 @@ export class ReportController {
   @Delete('/:id')
   @Authorization('permission', ['PERMISSAO_EXCLUIR_RELATORIO'])
   @HttpCode(204)
-  async delete(@Param('id', ParseIntPipe) id: number) {
-    await this.reportService.delete(id);
+  async delete(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: UserRequest.UserRequest,
+  ) {
+    if (!req.user) throw new UnauthorizedException();
+    await this.reportService.delete(id, req.user);
   }
 }
