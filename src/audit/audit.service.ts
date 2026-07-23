@@ -7,13 +7,20 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { env } from 'src/shared/env.schema';
 import { UserAuditLog } from './schemas/user-audit-log.schema';
-import type { AuditQueryDto } from './dto/audit-query.dto';
+import { sanitizeAuditMetadata } from './utils/sanitize-audit-metadata.util';
+import {
+  AUDIT_SORT_COLUMNS,
+  type AuditQueryDto,
+} from './dto/audit-query.dto';
 import type {
   AuditLogItem,
   AuditLogListResult,
   AuditRecordInput,
 } from './types/audit.types';
-import { sanitizeAuditMetadata } from './utils/sanitize-audit-metadata.util';
+import {
+  buildMongoSort,
+  parseListSortParam,
+} from 'src/shared/sort/list-sort.util';
 
 @Injectable()
 export class AuditService {
@@ -40,11 +47,13 @@ export class AuditService {
   async findPaginated(query: AuditQueryDto): Promise<AuditLogListResult> {
     const filter = this.buildFilter(query);
     const skip = (query.page - 1) * query.pageSize;
+    const sortSpecs = parseListSortParam(query.sort, AUDIT_SORT_COLUMNS);
+    const mongoSort = buildMongoSort(sortSpecs, { criado_em: -1 });
 
     const [items, total] = await Promise.all([
       this.auditModel
         .find(filter)
-        .sort({ criado_em: -1 })
+        .sort(mongoSort)
         .skip(skip)
         .limit(query.pageSize)
         .lean()

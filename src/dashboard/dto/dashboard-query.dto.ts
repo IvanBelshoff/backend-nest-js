@@ -27,6 +27,14 @@ export const dashboardPrivateQuerySchema = createPaginationSchema(4, 200).extend
     .enum(['true', 'false'])
     .optional()
     .transform((value) => value === 'true'),
+  sort: z
+    .string()
+    .trim()
+    .regex(
+      /^(nome|data_criacao|privacidade|temporario):(asc|desc)$/,
+      'Sort inválido. Use coluna:asc ou coluna:desc',
+    )
+    .optional(),
 });
 
 export type DashboardPrivateQueryDto = z.infer<

@@ -24,11 +24,19 @@ describe('updateUserPreferencesSchema', () => {
     expect(result.success).toBe(false);
   });
 
-  it('rejects invalid notification style', () => {
+  it('rejects invalid columnLines mode', () => {
     const result = updateUserPreferencesSchema.safeParse({
-      notification: { style: 'invalid-style' },
+      dataGridStyle: { columnLines: 'invalid' },
     });
 
     expect(result.success).toBe(false);
+  });
+
+  it('accepts valid dataGridStyle patch', () => {
+    const result = updateUserPreferencesSchema.safeParse({
+      dataGridStyle: { stripedRows: false, columnLines: 'header' },
+    });
+
+    expect(result.success).toBe(true);
   });
 });

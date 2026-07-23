@@ -35,6 +35,38 @@ const notificationPlacementSchema = z.enum([
   'bottom-right',
 ]);
 
+const dataGridSortPreferenceSchema = z
+  .object({
+    id: z.string().trim().min(1).max(120),
+    desc: z.boolean(),
+  })
+  .strict();
+
+const dataGridLayoutPreferenceSchema = z
+  .object({
+    columnOrder: z.array(z.string().trim().min(1).max(120)).max(50).optional(),
+    columnSizing: z
+      .record(z.string().trim().min(1).max(120), z.number().finite().positive().max(2000))
+      .optional(),
+    sorting: z.array(dataGridSortPreferenceSchema).max(10).optional(),
+  })
+  .strict();
+
+const dataGridStylePreferenceSchema = z
+  .object({
+    columnLines: z.enum(['none', 'header', 'full']).optional(),
+    stripedRows: z.boolean().optional(),
+    showRowLines: z.boolean().optional(),
+    stickyHeader: z.boolean().optional(),
+  })
+  .strict();
+
+const dataGridLayoutsSchema = z
+  .record(z.string().trim().min(1).max(80), dataGridLayoutPreferenceSchema)
+  .refine((value) => Object.keys(value).length <= 20, {
+    message: 'No máximo 20 layouts de grid podem ser salvos',
+  });
+
 export const updateUserPreferencesSchema = z
   .object({
     theme: z.enum(['system', 'dark', 'light']).optional(),
@@ -47,6 +79,8 @@ export const updateUserPreferencesSchema = z
       .strict()
       .optional(),
     language: z.enum(['pt-BR', 'en-US', 'es-ES']).optional(),
+    dataGridStyle: dataGridStylePreferenceSchema.optional(),
+    grids: dataGridLayoutsSchema.optional(),
   })
   .strict()
   .refine(
@@ -54,7 +88,9 @@ export const updateUserPreferencesSchema = z
       value.theme !== undefined ||
       value.accentColor !== undefined ||
       value.language !== undefined ||
-      value.notification !== undefined,
+      value.notification !== undefined ||
+      value.dataGridStyle !== undefined ||
+      value.grids !== undefined,
     { message: 'Informe ao menos uma preferência para atualizar' },
   );
 

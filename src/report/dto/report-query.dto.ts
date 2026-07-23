@@ -24,6 +24,14 @@ export const reportPrivateQuerySchema = createPaginationSchema(4, 200).extend({
     .enum(['true', 'false'])
     .optional()
     .transform((value) => value === 'true'),
+  sort: z
+    .string()
+    .trim()
+    .regex(
+      /^(nome|estado|privacidade):(asc|desc)$/,
+      'Sort inválido. Use coluna:asc ou coluna:desc',
+    )
+    .optional(),
 });
 
 export type ReportPrivateQueryDto = z.infer<typeof reportPrivateQuerySchema>;

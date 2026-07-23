@@ -35,10 +35,32 @@ export type UsuarioNotificationPreferences = {
   placement: UsuarioNotificationPlacement;
 };
 
+export type UsuarioDataGridSortPreference = {
+  id: string;
+  desc: boolean;
+};
+
+export type UsuarioDataGridLayoutPreference = {
+  columnOrder?: string[];
+  columnSizing?: Record<string, number>;
+  sorting?: UsuarioDataGridSortPreference[];
+};
+
+export type UsuarioDataGridColumnLinesMode = 'none' | 'header' | 'full';
+
+export type UsuarioDataGridStylePreference = {
+  columnLines: UsuarioDataGridColumnLinesMode;
+  stripedRows: boolean;
+  showRowLines: boolean;
+  stickyHeader: boolean;
+};
+
 export type UsuarioPreferenciasUi = {
   version: 1;
   theme: UsuarioThemePreference;
   accentColor: string;
   notification: UsuarioNotificationPreferences;
   language: UsuarioAppLanguage;
+  dataGridStyle?: UsuarioDataGridStylePreference;
+  grids?: Record<string, UsuarioDataGridLayoutPreference>;
 };

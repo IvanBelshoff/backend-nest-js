@@ -1,5 +1,14 @@
 import { z } from 'zod';
 
+const auditSortColumns = [
+  'criado_em',
+  'action',
+  'category',
+  'outcome',
+  'actor_email',
+  'resource_type',
+] as const;
+
 export const auditQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(200).default(50),
@@ -12,6 +21,15 @@ export const auditQuerySchema = z.object({
   from: z.string().datetime().optional(),
   to: z.string().datetime().optional(),
   search: z.string().min(1).max(200).optional(),
+  sort: z
+    .string()
+    .trim()
+    .regex(
+      /^(criado_em|action|category|outcome|actor_email|resource_type):(asc|desc)$/,
+      'Sort inválido. Use coluna:asc ou coluna:desc',
+    )
+    .optional(),
 });
 
 export type AuditQueryDto = z.infer<typeof auditQuerySchema>;
+export const AUDIT_SORT_COLUMNS = auditSortColumns;

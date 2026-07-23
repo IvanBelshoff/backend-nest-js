@@ -47,6 +47,9 @@ import {
   pickUsuarioIdsAuditSnapshot,
 } from 'src/audit/utils/audit-field-profiles';
 import { toAuditRecordMetadata } from 'src/audit/utils/audit-metadata.util';
+import { parseListSortParam } from 'src/shared/sort/list-sort.util';
+
+const REPORT_PRIVATE_SORT_COLUMNS = ['nome', 'estado', 'privacidade'] as const;
 
 interface Requester {
   sub: number;
@@ -72,6 +75,7 @@ export interface UserPrivateReportListParams {
   favoritos?: boolean;
   privacidade?: 'privado' | 'publico';
   temporario?: boolean;
+  sort?: string;
 }
 
 @Injectable()
@@ -203,6 +207,18 @@ export class ReportService {
 
     if (typeof params.temporario === 'boolean') {
       this.applyTemporaryFilter(query, params.temporario ? 'sim' : 'nao');
+    }
+
+    const sortSpecs = parseListSortParam(params.sort, REPORT_PRIVATE_SORT_COLUMNS);
+    if (sortSpecs.length > 0) {
+      for (const spec of sortSpecs) {
+        query.addOrderBy(
+          `relatorio.${spec.column}`,
+          spec.direction === 'desc' ? 'DESC' : 'ASC',
+        );
+      }
+    } else {
+      query.addOrderBy('relatorio.nome', 'ASC');
     }
 
     query.skip((params.page - 1) * params.limit).take(params.limit);

@@ -114,7 +114,7 @@ export class DashboardController {
       throw new UnauthorizedException();
     }
 
-    const { page, limit, nome, favoritos, privacidade, temporario } = query;
+    const { page, limit, nome, favoritos, privacidade, temporario, sort } = query;
 
     const { data, total, favoritos: favoriteIds } =
       await this.dashboardService.findAllPrivate(req.user.sub, {
@@ -124,6 +124,7 @@ export class DashboardController {
         favoritos,
         privacidade,
         temporario,
+        sort,
       });
 
     setTotalCount(response, total);

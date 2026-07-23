@@ -26,6 +26,16 @@ import {
   pickUsuarioIdsAuditSnapshot,
 } from 'src/audit/utils/audit-field-profiles';
 import { toAuditRecordMetadata } from 'src/audit/utils/audit-metadata.util';
+import {
+  parseListSortParam,
+} from 'src/shared/sort/list-sort.util';
+
+const DASHBOARD_PRIVATE_SORT_COLUMNS = [
+  'nome',
+  'data_criacao',
+  'privacidade',
+  'temporario',
+] as const;
 
 interface Requester {
   sub: number;
@@ -50,6 +60,7 @@ export interface UserPrivateListParams {
   favoritos?: boolean;
   privacidade?: 'privado' | 'publico';
   temporario?: boolean;
+  sort?: string;
 }
 
 export interface DashboardFilters {
@@ -185,6 +196,21 @@ export class DashboardService {
 
     if (typeof params.temporario === 'boolean') {
       this.applyTemporaryFilter(query, params.temporario ? 'sim' : 'nao');
+    }
+
+    const sortSpecs = parseListSortParam(
+      params.sort,
+      DASHBOARD_PRIVATE_SORT_COLUMNS,
+    );
+    if (sortSpecs.length > 0) {
+      for (const spec of sortSpecs) {
+        query.addOrderBy(
+          `dashboard.${spec.column}`,
+          spec.direction === 'desc' ? 'DESC' : 'ASC',
+        );
+      }
+    } else {
+      query.addOrderBy('dashboard.nome', 'ASC');
     }
 
     query.skip((params.page - 1) * params.limit).take(params.limit);
