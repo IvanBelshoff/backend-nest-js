@@ -47,10 +47,10 @@ export class UserNotification {
   @Column({ type: 'jsonb', default: {} })
   payload: Record<string, unknown>;
 
-  @Column({ name: 'read_at', type: 'timestamp', nullable: true })
+  @Column({ name: 'read_at', type: 'timestamptz', nullable: true })
   readAt: Date | null;
 
-  @CreateDateColumn({ name: 'created_at' })
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 
   @BeforeInsert()

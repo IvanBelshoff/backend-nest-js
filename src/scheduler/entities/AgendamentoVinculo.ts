@@ -50,10 +50,10 @@ export class AgendamentoVinculo {
   @Column({ name: 'pgboss_schedule_key', type: 'text', unique: true })
   pgbossScheduleKey: string;
 
-  @CreateDateColumn({ name: 'data_criacao', type: 'timestamp' })
+  @CreateDateColumn({ name: 'data_criacao', type: 'timestamptz' })
   dataCriacao: Date;
 
-  @UpdateDateColumn({ name: 'data_atualizacao', type: 'timestamp' })
+  @UpdateDateColumn({ name: 'data_atualizacao', type: 'timestamptz' })
   dataAtualizacao: Date;
 
   @OneToMany(() => AgendamentoExecucao, (execucao) => execucao.vinculo)

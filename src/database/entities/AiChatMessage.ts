@@ -35,6 +35,6 @@ export class AiChatMessage {
   @Column({ type: 'jsonb', default: {} })
   metadata: Record<string, unknown>;
 
-  @CreateDateColumn({ name: 'created_at' })
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 }

@@ -24,18 +24,18 @@ export class RefreshToken {
   @Column({ type: 'text', nullable: false, unique: true })
   token_hash: string;
 
-  @Column({ nullable: false, type: 'timestamp' })
+  @Column({ nullable: false, type: 'timestamptz' })
   expira_em: Date;
 
-  @Column({ nullable: true, type: 'timestamp' })
+  @Column({ nullable: true, type: 'timestamptz' })
   revogado_em?: Date | null;
 
   @Column({ nullable: true, type: 'text' })
   novo_token?: string | null;
 
-  @CreateDateColumn({ nullable: false, type: 'timestamp' })
+  @CreateDateColumn({ nullable: false, type: 'timestamptz' })
   data_criacao: Date;
 
-  @UpdateDateColumn({ nullable: false, type: 'timestamp' })
+  @UpdateDateColumn({ nullable: false, type: 'timestamptz' })
   data_atualizacao: Date;
 }

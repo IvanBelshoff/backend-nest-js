@@ -59,10 +59,10 @@ export class Agendamento {
   @Column({ name: 'usuario_atualizador', type: 'text', nullable: true })
   usuarioAtualizador: string | null;
 
-  @CreateDateColumn({ name: 'data_criacao', type: 'timestamp' })
+  @CreateDateColumn({ name: 'data_criacao', type: 'timestamptz' })
   dataCriacao: Date;
 
-  @UpdateDateColumn({ name: 'data_atualizacao', type: 'timestamp' })
+  @UpdateDateColumn({ name: 'data_atualizacao', type: 'timestamptz' })
   dataAtualizacao: Date;
 
   @OneToMany(() => AgendamentoVinculo, (vinculo) => vinculo.agendamento)

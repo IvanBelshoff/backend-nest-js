@@ -1,5 +1,5 @@
-import 'dotenv/config';
-/* eslint-disable @typescript-eslint/no-floating-promises */
+process.env.TZ = 'UTC';
+import 'dotenv/config';/* eslint-disable @typescript-eslint/no-floating-promises */
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import cookieParser from 'cookie-parser';

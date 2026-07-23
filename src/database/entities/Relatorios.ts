@@ -86,7 +86,7 @@ export class Relatorio {
   @JoinColumn({ name: 'id_conexao' })
   conexao: Conexao;
 
-  @Column({ nullable: true, type: 'timestamp' })
+  @Column({ nullable: true, type: 'timestamptz' })
   snapshot_atualizado_em?: Date | null;
 
   @Column({ nullable: false, type: 'boolean', default: true })
@@ -107,10 +107,10 @@ export class Relatorio {
   @Column({ type: 'text', nullable: true })
   usuario_atualizador?: string;
 
-  @CreateDateColumn({ nullable: false, type: 'timestamp' })
+  @CreateDateColumn({ nullable: false, type: 'timestamptz' })
   data_criacao: Date;
 
-  @UpdateDateColumn({ nullable: false, type: 'timestamp' })
+  @UpdateDateColumn({ nullable: false, type: 'timestamptz' })
   data_atualizacao: Date;
 
   @OneToMany(() => UsuarioRelatorio, (usuarioRelatorio) => usuarioRelatorio.relatorio)

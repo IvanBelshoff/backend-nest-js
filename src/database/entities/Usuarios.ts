@@ -43,13 +43,13 @@ export class Usuario {
   @Column({ type: 'text', nullable: true })
   usuario_cadastrador?: string;
 
-  @Column({ nullable: true, type: 'timestamp' })
+  @Column({ nullable: true, type: 'timestamptz' })
   ultimo_login?: Date;
 
-  @CreateDateColumn({ nullable: false, type: 'timestamp' })
+  @CreateDateColumn({ nullable: false, type: 'timestamptz' })
   data_criacao: Date;
 
-  @UpdateDateColumn({ nullable: false, type: 'timestamp' })
+  @UpdateDateColumn({ nullable: false, type: 'timestamptz' })
   data_atualizacao: Date;
 
   @Column({ type: 'simple-array', nullable: true })

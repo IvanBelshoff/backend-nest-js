@@ -57,10 +57,10 @@ export class Dashboard {
   @Column({ type: 'text', nullable: true })
   usuario_atualizador?: string;
 
-  @CreateDateColumn({ nullable: false, type: 'timestamp' })
+  @CreateDateColumn({ nullable: false, type: 'timestamptz' })
   data_criacao: Date;
 
-  @UpdateDateColumn({ nullable: false, type: 'timestamp' })
+  @UpdateDateColumn({ nullable: false, type: 'timestamptz' })
   data_atualizacao: Date;
 
   @ManyToMany(() => Usuario, (usuario) => usuario.dashboard)

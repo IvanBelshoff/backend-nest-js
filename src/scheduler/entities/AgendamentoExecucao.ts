@@ -37,9 +37,9 @@ export class AgendamentoExecucao {
   @Column({ type: 'text', nullable: true })
   erro: string | null;
 
-  @CreateDateColumn({ name: 'iniciado_em', type: 'timestamp' })
+  @CreateDateColumn({ name: 'iniciado_em', type: 'timestamptz' })
   iniciadoEm: Date;
 
-  @Column({ name: 'concluido_em', type: 'timestamp', nullable: true })
+  @Column({ name: 'concluido_em', type: 'timestamptz', nullable: true })
   concluidoEm: Date | null;
 }

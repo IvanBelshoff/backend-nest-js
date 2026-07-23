@@ -31,9 +31,9 @@ export class AiChatThread {
   @OneToMany(() => AiChatMessage, (message) => message.thread)
   messages: AiChatMessage[];
 
-  @CreateDateColumn({ name: 'created_at' })
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 
-  @UpdateDateColumn({ name: 'updated_at' })
+  @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
   updatedAt: Date;
 }

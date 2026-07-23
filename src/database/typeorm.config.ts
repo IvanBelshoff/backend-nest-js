@@ -48,6 +48,7 @@ export function getTypeOrmConfig() {
     extra: {
       max: env.DB_POOL_MAX,
       idleTimeoutMillis: 30000,
+      options: '-c timezone=UTC',
     },
   };
 }

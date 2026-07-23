@@ -63,9 +63,9 @@ export class RelatorioJob {
   @Column({ type: 'jsonb', default: {} })
   parametros: Record<string, unknown>;
 
-  @CreateDateColumn({ name: 'created_at' })
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 
-  @Column({ name: 'completed_at', type: 'timestamp', nullable: true })
+  @Column({ name: 'completed_at', type: 'timestamptz', nullable: true })
   completedAt: Date | null;
 }
