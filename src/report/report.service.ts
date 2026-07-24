@@ -47,6 +47,7 @@ import {
   pickUsuarioIdsAuditSnapshot,
 } from 'src/audit/utils/audit-field-profiles';
 import { toAuditRecordMetadata } from 'src/audit/utils/audit-metadata.util';
+import { mergeAuditUsuarioDisplaySources } from 'src/audit/utils/audit-usuario-display.util';
 import { parseListSortParam } from 'src/shared/sort/list-sort.util';
 
 const REPORT_PRIVATE_SORT_COLUMNS = ['nome', 'estado', 'privacidade'] as const;
@@ -572,6 +573,8 @@ export class ReportService {
   ): Promise<void> {
     let beforeUsuarioIds: number[] = [];
     let afterUsuarioIds: number[] = [];
+    let beforeUsuarios: Usuario[] = [];
+    let afterUsuarios: Usuario[] = [];
 
     await this.relatorioRepository.manager.transaction(async (manager) => {
       const relatorioRepository = manager.getRepository(Relatorio);
@@ -591,6 +594,9 @@ export class ReportService {
       beforeUsuarioIds = (relatorio.usuarioRelatorios ?? []).map((grant) =>
         Number(grant.usuarioId),
       );
+      beforeUsuarios = beforeUsuarioIds.length
+        ? await userRepository.find({ where: { id: In(beforeUsuarioIds) } })
+        : [];
 
       const usuarioIds = usuarios.map((item) => item.id);
 
@@ -648,6 +654,7 @@ export class ReportService {
       }
 
       afterUsuarioIds = usuarios.map((item) => item.id);
+      afterUsuarios = users;
     });
 
     if (requester) {
@@ -662,7 +669,16 @@ export class ReportService {
             pickUsuarioIdsAuditSnapshot(beforeUsuarioIds),
             pickUsuarioIdsAuditSnapshot(afterUsuarioIds),
             ACL_USUARIO_IDS_AUDIT_PROFILE,
+            {
+              usuarioDisplaySources: mergeAuditUsuarioDisplaySources(
+                beforeUsuarios,
+                afterUsuarios,
+              ),
+            },
           ),
+          {
+            usuarioIds: { from: beforeUsuarioIds, to: afterUsuarioIds },
+          },
         ),
       });
     }

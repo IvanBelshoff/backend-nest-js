@@ -2,7 +2,7 @@ import { env } from 'src/shared/env.schema';
 
 export const jwtConstants = {
   secret: env.JWT_SECRET,
-  expiresIn: '1m' as const,
+  expiresIn: '20m' as const,
   expiresInSeconds: 20 * 60,
 };
 

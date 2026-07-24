@@ -26,6 +26,7 @@ import {
   pickUsuarioIdsAuditSnapshot,
 } from 'src/audit/utils/audit-field-profiles';
 import { toAuditRecordMetadata } from 'src/audit/utils/audit-metadata.util';
+import { mergeAuditUsuarioDisplaySources } from 'src/audit/utils/audit-usuario-display.util';
 import {
   parseListSortParam,
 } from 'src/shared/sort/list-sort.util';
@@ -567,6 +568,8 @@ export class DashboardService {
   ): Promise<void> {
     let beforeUsuarioIds: number[] = [];
     let afterUsuarioIds: number[] = [];
+    let beforeUsuarios: Usuario[] = [];
+    let afterUsuarios: Usuario[] = [];
 
     await this.dashboardRepository.manager.transaction(async (manager) => {
       const dashboardRepository = manager.getRepository(Dashboard);
@@ -582,6 +585,7 @@ export class DashboardService {
       }
 
       beforeUsuarioIds = (dashboard.usuario ?? []).map((user) => Number(user.id));
+      beforeUsuarios = dashboard.usuario ?? [];
 
       if (
         dashboard.id_proprietario &&
@@ -622,6 +626,7 @@ export class DashboardService {
 
       await dashboardRepository.save(dashboard);
       afterUsuarioIds = users.map((user) => Number(user.id));
+      afterUsuarios = users;
     });
 
     if (requester) {
@@ -636,7 +641,16 @@ export class DashboardService {
             pickUsuarioIdsAuditSnapshot(beforeUsuarioIds),
             pickUsuarioIdsAuditSnapshot(afterUsuarioIds),
             ACL_USUARIO_IDS_AUDIT_PROFILE,
+            {
+              usuarioDisplaySources: mergeAuditUsuarioDisplaySources(
+                beforeUsuarios,
+                afterUsuarios,
+              ),
+            },
           ),
+          {
+            usuarioIds: { from: beforeUsuarioIds, to: afterUsuarioIds },
+          },
         ),
       });
     }

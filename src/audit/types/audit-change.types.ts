@@ -5,9 +5,13 @@ export interface AuditFieldChange {
   field: string;
   from: unknown | null;
   to: unknown | null;
+  fromDisplay?: string[] | null;
+  toDisplay?: string[] | null;
   summary?: AuditChangeSummary;
   added?: number[];
   removed?: number[];
+  addedDisplay?: string[];
+  removedDisplay?: string[];
 }
 
 export interface AuditMetadataV2 {

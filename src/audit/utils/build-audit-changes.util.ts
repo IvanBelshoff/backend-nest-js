@@ -6,6 +6,15 @@ import {
   AUDIT_ACL_COMPACT_THRESHOLD,
   AUDIT_MAX_STRING_LENGTH,
 } from '../types/audit-change.types';
+import {
+  buildAuditUsuarioDisplayLabels,
+  buildAuditUsuarioDisplayMap,
+  type AuditUsuarioDisplaySource,
+} from './audit-usuario-display.util';
+
+export type BuildAuditChangesOptions = {
+  usuarioDisplaySources?: AuditUsuarioDisplaySource[];
+};
 
 function valuesEqual(left: unknown, right: unknown): boolean {
   if (Object.is(left, right)) {
@@ -79,6 +88,7 @@ function buildAclUsuarioIdsChange(
   field: string,
   before: unknown,
   after: unknown,
+  usuariosById: Map<number, AuditUsuarioDisplaySource>,
 ): AuditFieldChange | null {
   const beforeIds = Array.isArray(before)
     ? before.map((id) => Number(id)).filter((id) => Number.isFinite(id))
@@ -106,6 +116,8 @@ function buildAclUsuarioIdsChange(
       to: null,
       added,
       removed,
+      addedDisplay: buildAuditUsuarioDisplayLabels(added, usuariosById),
+      removedDisplay: buildAuditUsuarioDisplayLabels(removed, usuariosById),
     };
   }
 
@@ -113,6 +125,8 @@ function buildAclUsuarioIdsChange(
     field,
     from: beforeIds,
     to: afterIds,
+    fromDisplay: buildAuditUsuarioDisplayLabels(beforeIds, usuariosById),
+    toDisplay: buildAuditUsuarioDisplayLabels(afterIds, usuariosById),
   };
 }
 
@@ -120,8 +134,10 @@ export function buildAuditChanges(
   before: Record<string, unknown>,
   after: Record<string, unknown>,
   profile: AuditFieldProfile,
+  options?: BuildAuditChangesOptions,
 ): AuditFieldChange[] {
   const changes: AuditFieldChange[] = [];
+  const usuariosById = buildAuditUsuarioDisplayMap(options?.usuarioDisplaySources ?? []);
 
   for (const entry of profile.fields) {
     const field = entry.field;
@@ -141,7 +157,12 @@ export function buildAuditChanges(
     }
 
     if (field === 'usuarioIds') {
-      const aclChange = buildAclUsuarioIdsChange(field, beforeValue, afterValue);
+      const aclChange = buildAclUsuarioIdsChange(
+        field,
+        beforeValue,
+        afterValue,
+        usuariosById,
+      );
       if (aclChange) {
         changes.push(aclChange);
       }
