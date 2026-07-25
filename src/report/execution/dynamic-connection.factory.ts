@@ -24,6 +24,42 @@ export function getConnectionCredentials(conexao: Conexao): ConnectionCredential
   };
 }
 
+export async function executeCountQuery(
+  conexao: Conexao,
+  senha: string,
+  sql: string,
+  params: Record<string, unknown>,
+  timeoutMs: number,
+): Promise<number> {
+  const countSql = buildCountQuery(sql, conexao.tipo);
+  const result = await executeQuery(conexao, senha, countSql, params, 1, timeoutMs);
+  const firstRow = result.dados[0];
+
+  if (!firstRow) {
+    return 0;
+  }
+
+  const totalValue = firstRow.total ?? firstRow.TOTAL ?? Object.values(firstRow)[0];
+  const parsed = Number(totalValue);
+
+  if (!Number.isFinite(parsed)) {
+    throw new BadRequestException('Não foi possível interpretar o total de registros.');
+  }
+
+  return parsed;
+}
+
+function buildCountQuery(sql: string, tipo: TipoConexao): string {
+  const trimmed = sql.trim();
+
+  switch (tipo) {
+    case TipoConexao.ORACLE:
+      return `SELECT COUNT(*) AS total FROM (${trimmed}) subquery`;
+    default:
+      return `SELECT COUNT(*) AS total FROM (${trimmed}) AS subquery`;
+  }
+}
+
 export async function testConnection(conexao: Conexao): Promise<void> {
   const { senha } = getConnectionCredentials(conexao);
   await executeQuery(conexao, senha, 'SELECT 1 AS ok', {}, 1, 5000);

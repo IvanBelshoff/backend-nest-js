@@ -15,6 +15,7 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { ConnectionService } from './connection.service';
+import { ConnectionQueryService } from './connection-query.service';
 import {
   createConnectionSchema,
   type CreateConnectionDto,
@@ -27,6 +28,12 @@ import {
   connectionQuerySchema,
   type ConnectionQueryDto,
 } from './dto/connection-query.dto';
+import {
+  connectionQueryCountSchema,
+  connectionQueryPreviewSchema,
+  type ConnectionQueryCountDto,
+  type ConnectionQueryPreviewDto,
+} from './dto/connection-query-preview.dto';
 import { ZodValidation, ZodQueryValidation } from 'src/shared/decorators/zod-validation.decorator';
 import { Authorization, AuthorizationAll } from 'src/shared/decorators/authorization.decorator';
 import * as UserRequest from 'src/shared/interfaces/UserRequest';
@@ -37,7 +44,10 @@ import { ApiBearerAuth, ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger
 @ApiTags('conexoes')
 @ApiBearerAuth('access-token')
 export class ConnectionController {
-  constructor(private readonly connectionService: ConnectionService) {}
+  constructor(
+    private readonly connectionService: ConnectionService,
+    private readonly connectionQueryService: ConnectionQueryService,
+  ) {}
 
   @Post('/')
   @AuthorizationAll(
@@ -119,5 +129,82 @@ export class ConnectionController {
   ) {
     if (!req.user) throw new UnauthorizedException();
     return this.connectionService.test(id, req.user);
+  }
+
+  @Post('/:id/consultar')
+  @AuthorizationAll(
+    { type: 'role', required: ['REGRA_RELATORIO'] },
+    { type: 'permission', required: ['PERMISSAO_CRIAR_RELATORIO', 'PERMISSAO_ATUALIZAR_RELATORIO'] },
+  )
+  @ZodValidation(connectionQueryPreviewSchema)
+  @ApiOperation({ summary: 'Executa preview de query ad-hoc na conexão' })
+  async previewQuery(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ConnectionQueryPreviewDto,
+    @Request() req: UserRequest.UserRequest,
+  ) {
+    if (!req.user) throw new UnauthorizedException();
+    return this.connectionQueryService.preview(id, dto, req.user);
+  }
+
+  @Post('/:id/consultar/contar')
+  @AuthorizationAll(
+    { type: 'role', required: ['REGRA_RELATORIO'] },
+    { type: 'permission', required: ['PERMISSAO_CRIAR_RELATORIO', 'PERMISSAO_ATUALIZAR_RELATORIO'] },
+  )
+  @ZodValidation(connectionQueryCountSchema)
+  @ApiOperation({ summary: 'Conta total de registros de uma query ad-hoc' })
+  async countQuery(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ConnectionQueryCountDto,
+    @Request() req: UserRequest.UserRequest,
+  ) {
+    if (!req.user) throw new UnauthorizedException();
+    return this.connectionQueryService.count(id, dto, req.user);
+  }
+
+  @Get('/:id/schema')
+  @AuthorizationAll(
+    { type: 'role', required: ['REGRA_RELATORIO'] },
+    { type: 'permission', required: ['PERMISSAO_CRIAR_RELATORIO', 'PERMISSAO_ATUALIZAR_RELATORIO'] },
+  )
+  @ApiOperation({ summary: 'Lista schemas/databases da conexão' })
+  async listSchema(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: UserRequest.UserRequest,
+  ) {
+    if (!req.user) throw new UnauthorizedException();
+    return this.connectionQueryService.listSchemas(id);
+  }
+
+  @Get('/:id/schema/:escopo/tabelas')
+  @AuthorizationAll(
+    { type: 'role', required: ['REGRA_RELATORIO'] },
+    { type: 'permission', required: ['PERMISSAO_CRIAR_RELATORIO', 'PERMISSAO_ATUALIZAR_RELATORIO'] },
+  )
+  @ApiOperation({ summary: 'Lista tabelas/views de um schema' })
+  async listTables(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('escopo') escopo: string,
+    @Request() req: UserRequest.UserRequest,
+  ) {
+    if (!req.user) throw new UnauthorizedException();
+    return this.connectionQueryService.listTables(id, escopo);
+  }
+
+  @Get('/:id/schema/:escopo/tabelas/:tabela/colunas')
+  @AuthorizationAll(
+    { type: 'role', required: ['REGRA_RELATORIO'] },
+    { type: 'permission', required: ['PERMISSAO_CRIAR_RELATORIO', 'PERMISSAO_ATUALIZAR_RELATORIO'] },
+  )
+  @ApiOperation({ summary: 'Lista colunas de uma tabela' })
+  async listColumns(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('escopo') escopo: string,
+    @Param('tabela') tabela: string,
+    @Request() req: UserRequest.UserRequest,
+  ) {
+    if (!req.user) throw new UnauthorizedException();
+    return this.connectionQueryService.listColumns(id, escopo, tabela);
   }
 }

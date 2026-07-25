@@ -15,6 +15,8 @@ export const AUDIT_ACTIONS = {
   CONNECTION_UPDATE: 'connection.update',
   CONNECTION_DELETE: 'connection.delete',
   CONNECTION_TEST: 'connection.test',
+  CONNECTION_QUERY_PREVIEW: 'connection.query_preview',
+  CONNECTION_QUERY_COUNT: 'connection.query_count',
 
   DASHBOARD_CREATE: 'dashboard.create',
   DASHBOARD_UPDATE: 'dashboard.update',

@@ -56,6 +56,10 @@ export const envSchema = z.object({
   CONNECTION_ENCRYPTION_KEY: z.string().min(1),
   REPORT_QUERY_TIMEOUT_MS: z.coerce.number().int().positive().default(600000),
   REPORT_QUERY_MAX_ROWS: z.coerce.number().int().positive().default(10000),
+  QUERY_PREVIEW_MAX_ROWS: z.coerce.number().int().positive().default(200),
+  QUERY_PREVIEW_TIMEOUT_MS: z.coerce.number().int().positive().default(30000),
+  QUERY_COUNT_TIMEOUT_MS: z.coerce.number().int().positive().default(60000),
+  QUERY_SCHEMA_CACHE_TTL_MS: z.coerce.number().int().positive().default(300000),
   PG_BOSS_ENABLED: z
     .string()
     .optional()
