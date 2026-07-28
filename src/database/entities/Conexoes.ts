@@ -42,7 +42,7 @@ export class Conexao {
   @Column({ type: 'text', nullable: false })
   usuario: string;
 
-  @Column({ type: 'text', nullable: false })
+  @Column({ type: 'text', nullable: false, select: false })
   senha_criptografada: string;
 
   @Column({ type: 'jsonb', nullable: true })

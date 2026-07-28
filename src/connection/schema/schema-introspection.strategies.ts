@@ -5,10 +5,41 @@ import type {
   TableListResult,
 } from './schema-introspection.types';
 
+export interface SchemaIntrospectionQuery {
+  sql: string;
+  params: Record<string, unknown>;
+}
+
 export interface SchemaIntrospectionStrategy {
   listScopes(): string;
-  listTables(escopo: string): string;
-  listColumns(escopo: string, tabela: string): string;
+  listTables(escopo: string): SchemaIntrospectionQuery;
+  listColumns(escopo: string, tabela: string): SchemaIntrospectionQuery;
+}
+
+function tablesQuery(escopo: string): SchemaIntrospectionQuery {
+  return {
+    sql: `
+      SELECT table_name AS nome, table_type AS tipo
+      FROM information_schema.tables
+      WHERE table_schema = :escopo
+        AND table_type IN ('BASE TABLE', 'VIEW')
+      ORDER BY table_name
+    `,
+    params: { escopo },
+  };
+}
+
+function columnsQuery(escopo: string, tabela: string): SchemaIntrospectionQuery {
+  return {
+    sql: `
+      SELECT column_name AS nome, data_type AS tipo_dado, is_nullable AS nullable
+      FROM information_schema.columns
+      WHERE table_schema = :escopo
+        AND table_name = :tabela
+      ORDER BY ordinal_position
+    `,
+    params: { escopo, tabela },
+  };
 }
 
 export const postgresIntrospection: SchemaIntrospectionStrategy = {
@@ -20,20 +51,8 @@ export const postgresIntrospection: SchemaIntrospectionStrategy = {
       AND schema_name NOT LIKE 'pg_toast_temp_%'
     ORDER BY schema_name
   `,
-  listTables: (escopo) => `
-    SELECT table_name AS nome, table_type AS tipo
-    FROM information_schema.tables
-    WHERE table_schema = '${escopo.replace(/'/g, "''")}'
-      AND table_type IN ('BASE TABLE', 'VIEW')
-    ORDER BY table_name
-  `,
-  listColumns: (escopo, tabela) => `
-    SELECT column_name AS nome, data_type AS tipo_dado, is_nullable AS nullable
-    FROM information_schema.columns
-    WHERE table_schema = '${escopo.replace(/'/g, "''")}'
-      AND table_name = '${tabela.replace(/'/g, "''")}'
-    ORDER BY ordinal_position
-  `,
+  listTables: tablesQuery,
+  listColumns: columnsQuery,
 };
 
 export const mysqlIntrospection: SchemaIntrospectionStrategy = {
@@ -43,20 +62,8 @@ export const mysqlIntrospection: SchemaIntrospectionStrategy = {
     WHERE schema_name NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys')
     ORDER BY schema_name
   `,
-  listTables: (escopo) => `
-    SELECT table_name AS nome, table_type AS tipo
-    FROM information_schema.tables
-    WHERE table_schema = '${escopo.replace(/'/g, "''")}'
-      AND table_type IN ('BASE TABLE', 'VIEW')
-    ORDER BY table_name
-  `,
-  listColumns: (escopo, tabela) => `
-    SELECT column_name AS nome, data_type AS tipo_dado, is_nullable AS nullable
-    FROM information_schema.columns
-    WHERE table_schema = '${escopo.replace(/'/g, "''")}'
-      AND table_name = '${tabela.replace(/'/g, "''")}'
-    ORDER BY ordinal_position
-  `,
+  listTables: tablesQuery,
+  listColumns: columnsQuery,
 };
 
 export const mssqlIntrospection: SchemaIntrospectionStrategy = {
@@ -66,29 +73,35 @@ export const mssqlIntrospection: SchemaIntrospectionStrategy = {
     WHERE name NOT IN ('sys', 'INFORMATION_SCHEMA', 'guest')
     ORDER BY name
   `,
-  listTables: (escopo) => `
-    SELECT t.name AS nome,
-      CASE WHEN t.type = 'V' THEN 'VIEW' ELSE 'BASE TABLE' END AS tipo
-    FROM sys.tables t
-    INNER JOIN sys.schemas s ON t.schema_id = s.schema_id
-    WHERE s.name = '${escopo.replace(/'/g, "''")}'
-    UNION ALL
-    SELECT v.name AS nome, 'VIEW' AS tipo
-    FROM sys.views v
-    INNER JOIN sys.schemas s ON v.schema_id = s.schema_id
-    WHERE s.name = '${escopo.replace(/'/g, "''")}'
-    ORDER BY nome
-  `,
-  listColumns: (escopo, tabela) => `
-    SELECT c.name AS nome, ty.name AS tipo_dado,
-      CASE WHEN c.is_nullable = 1 THEN 'YES' ELSE 'NO' END AS nullable
-    FROM sys.columns c
-    INNER JOIN sys.tables t ON c.object_id = t.object_id
-    INNER JOIN sys.schemas s ON t.schema_id = s.schema_id
-    INNER JOIN sys.types ty ON c.user_type_id = ty.user_type_id
-    WHERE s.name = '${escopo.replace(/'/g, "''")}' AND t.name = '${tabela.replace(/'/g, "''")}'
-    ORDER BY c.column_id
-  `,
+  listTables: (escopo) => ({
+    sql: `
+      SELECT t.name AS nome,
+        CASE WHEN t.type = 'V' THEN 'VIEW' ELSE 'BASE TABLE' END AS tipo
+      FROM sys.tables t
+      INNER JOIN sys.schemas s ON t.schema_id = s.schema_id
+      WHERE s.name = :escopo
+      UNION ALL
+      SELECT v.name AS nome, 'VIEW' AS tipo
+      FROM sys.views v
+      INNER JOIN sys.schemas s ON v.schema_id = s.schema_id
+      WHERE s.name = :escopo
+      ORDER BY nome
+    `,
+    params: { escopo },
+  }),
+  listColumns: (escopo, tabela) => ({
+    sql: `
+      SELECT c.name AS nome, ty.name AS tipo_dado,
+        CASE WHEN c.is_nullable = 1 THEN 'YES' ELSE 'NO' END AS nullable
+      FROM sys.columns c
+      INNER JOIN sys.tables t ON c.object_id = t.object_id
+      INNER JOIN sys.schemas s ON t.schema_id = s.schema_id
+      INNER JOIN sys.types ty ON c.user_type_id = ty.user_type_id
+      WHERE s.name = :escopo AND t.name = :tabela
+      ORDER BY c.column_id
+    `,
+    params: { escopo, tabela },
+  }),
 };
 
 export const oracleIntrospection: SchemaIntrospectionStrategy = {
@@ -100,21 +113,27 @@ export const oracleIntrospection: SchemaIntrospectionStrategy = {
     )
     ORDER BY username
   `,
-  listTables: (escopo) => `
-    SELECT table_name AS nome, 'BASE TABLE' AS tipo FROM all_tables
-    WHERE owner = UPPER('${escopo.replace(/'/g, "''")}')
-    UNION ALL
-    SELECT view_name AS nome, 'VIEW' AS tipo FROM all_views
-    WHERE owner = UPPER('${escopo.replace(/'/g, "''")}')
-    ORDER BY nome
-  `,
-  listColumns: (escopo, tabela) => `
-    SELECT column_name AS nome, data_type AS tipo_dado, nullable
-    FROM all_tab_columns
-    WHERE owner = UPPER('${escopo.replace(/'/g, "''")}')
-      AND table_name = UPPER('${tabela.replace(/'/g, "''")}')
-    ORDER BY column_id
-  `,
+  listTables: (escopo) => ({
+    sql: `
+      SELECT table_name AS nome, 'BASE TABLE' AS tipo FROM all_tables
+      WHERE owner = UPPER(:escopo)
+      UNION ALL
+      SELECT view_name AS nome, 'VIEW' AS tipo FROM all_views
+      WHERE owner = UPPER(:escopo)
+      ORDER BY nome
+    `,
+    params: { escopo },
+  }),
+  listColumns: (escopo, tabela) => ({
+    sql: `
+      SELECT column_name AS nome, data_type AS tipo_dado, nullable
+      FROM all_tab_columns
+      WHERE owner = UPPER(:escopo)
+        AND table_name = UPPER(:tabela)
+      ORDER BY column_id
+    `,
+    params: { escopo, tabela },
+  }),
 };
 
 export function getSchemaIntrospectionStrategy(

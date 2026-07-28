@@ -3,7 +3,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { env } from '../env.schema';
 
 export function setupSwagger(app: INestApplication): void {
-  if (env.NODE_ENV === 'production' && !env.SWAGGER_ENABLED) {
+  if (!env.SWAGGER_ENABLED) {
     return;
   }
 

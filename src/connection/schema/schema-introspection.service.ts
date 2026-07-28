@@ -62,11 +62,12 @@ export class SchemaIntrospectionService {
     }
 
     const strategy = getSchemaIntrospectionStrategy(conexao.tipo);
+    const { sql, params } = strategy.listTables(escopo);
     const result = await executeQuery(
       conexao,
       senha,
-      strategy.listTables(escopo),
-      {},
+      sql,
+      params,
       10_000,
       env.QUERY_PREVIEW_TIMEOUT_MS,
     );
@@ -90,11 +91,12 @@ export class SchemaIntrospectionService {
     }
 
     const strategy = getSchemaIntrospectionStrategy(conexao.tipo);
+    const { sql, params } = strategy.listColumns(escopo, tabela);
     const result = await executeQuery(
       conexao,
       senha,
-      strategy.listColumns(escopo, tabela),
-      {},
+      sql,
+      params,
       500,
       env.QUERY_PREVIEW_TIMEOUT_MS,
     );

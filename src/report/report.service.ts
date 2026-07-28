@@ -21,12 +21,16 @@ import { UsuarioRelatorio } from 'src/database/entities/UsuarioRelatorio';
 import { env } from 'src/shared/env.schema';
 import {
   buildRelatorioUsuarioGrants,
-  getRelatorioAssignedUsers,
   mapExistingIaByUsuarioId,
   relatorioHasUserGrant,
   userHasRelatorioGrant,
 } from 'src/shared/utils/usuario-relatorio.util';
 import { CreateReportDto, UpdateReportDto } from './dto/create-report.dto';
+import {
+  PublicReportResponseDto,
+  toPublicReportResponse,
+  toPublicReportResponseList,
+} from './dto/public-report.response';
 import { ReportSnapshotService } from './report-snapshot.service';
 import { resolvePermitirConhecimentoIa } from './report-ai-knowledge.util';
 import { UsuarioRelatorioAccessService } from './usuario-relatorio-access.service';
@@ -239,13 +243,13 @@ export class ReportService {
     page: number,
     limit: number,
     nome?: string,
-  ): Promise<{ data: Relatorio[]; total: number }> {
+  ): Promise<{ data: PublicReportResponseDto[]; total: number }> {
     const query = this.baseQuery();
     this.applyPublicAccessRules(query);
     this.applyNameFilter(query, nome);
     query.skip((page - 1) * limit).take(limit);
     const [data, total] = await query.getManyAndCount();
-    return { data, total };
+    return { data: toPublicReportResponseList(data), total };
   }
 
   async getFilters(params: ReportListParams) {
@@ -277,7 +281,7 @@ export class ReportService {
     };
   }
 
-  async findPublicById(id: number): Promise<Relatorio> {
+  async findPublicById(id: number): Promise<PublicReportResponseDto> {
     const relatorio = await this.relatorioRepository.findOne({
       where: { id },
       relations: { conexao: true },
@@ -292,7 +296,7 @@ export class ReportService {
     }
 
     this.assertNotExpired(relatorio);
-    return relatorio;
+    return toPublicReportResponse(relatorio);
   }
 
   async findPrivateById(id: number, userId: number): Promise<Relatorio> {

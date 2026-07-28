@@ -34,7 +34,7 @@ import { Relatorio } from './database/entities/Relatorios';
 import { UsuarioRelatorio } from './database/entities/UsuarioRelatorio';
 import { env } from './shared/env.schema';
 
-const isThrottlingEnabled = env.NODE_ENV !== 'development';
+const isThrottlingEnabled = env.THROTTLING_ENABLED;
 
 @Module({
   controllers: [AppController],

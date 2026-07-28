@@ -183,11 +183,7 @@ export class ConnectionService {
     id: number,
     requester?: { sub: number; email: string },
   ): Promise<{ ok: true }> {
-    const connection = await this.connectionRepository.findOne({ where: { id } });
-
-    if (!connection) {
-      throw new NotFoundException('Conexão não localizada');
-    }
+    const connection = await this.findOneWithPassword(id);
 
     await testConnection(connection);
 
@@ -206,17 +202,25 @@ export class ConnectionService {
   }
 
   async findByIdWithPassword(id: number): Promise<Conexao> {
-    const connection = await this.connectionRepository.findOne({ where: { id } });
+    return this.findOneWithPassword(id);
+  }
+
+  getDecryptedPassword(connection: Conexao): string {
+    return decryptConnectionPassword(connection.senha_criptografada);
+  }
+
+  private async findOneWithPassword(id: number): Promise<Conexao> {
+    const connection = await this.connectionRepository
+      .createQueryBuilder('conexao')
+      .where('conexao.id = :id', { id })
+      .addSelect('conexao.senha_criptografada')
+      .getOne();
 
     if (!connection) {
       throw new NotFoundException('Conexão não localizada');
     }
 
     return connection;
-  }
-
-  getDecryptedPassword(connection: Conexao): string {
-    return decryptConnectionPassword(connection.senha_criptografada);
   }
 
   private sanitize(connection: Conexao): Conexao {

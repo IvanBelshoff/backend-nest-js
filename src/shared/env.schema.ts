@@ -51,6 +51,10 @@ export const envSchema = z.object({
     .string()
     .optional()
     .transform((value) => value === 'true'),
+  THROTTLING_ENABLED: z
+    .string()
+    .optional()
+    .transform((value) => value !== 'false'),
   MONGO_URI: z.string().min(1),
   MONGO_DB_NAME: z.string().min(1),
   CONNECTION_ENCRYPTION_KEY: z.string().min(1),

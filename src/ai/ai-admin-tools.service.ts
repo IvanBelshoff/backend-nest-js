@@ -7,6 +7,7 @@ import { Usuario } from 'src/database/entities/Usuarios';
 import { DashboardService } from 'src/dashboard/dashboard.service';
 import { ReportJobService } from 'src/report/jobs/report-job.service';
 import { ReportService } from 'src/report/report.service';
+import type { PublicReportResponseDto } from 'src/report/dto/public-report.response';
 import { SchedulerService } from 'src/scheduler/scheduler.service';
 import { MetricsCollectorService } from 'src/system-metrics/metrics-collector.service';
 import { MetricsPersistenceService } from 'src/system-metrics/metrics-persistence.service';
@@ -402,7 +403,7 @@ export class AiAdminToolsService {
     privateDashboards: Dashboard[],
     privateReports: Array<Relatorio & { permitirConhecimentoIa: boolean }>,
     publicDashboards: Dashboard[],
-    publicReports: Relatorio[],
+    publicReports: PublicReportResponseDto[],
   ): AiAdminUserDetail {
     const base = this.sanitizeUser(user);
     const extended = user as Omit<Usuario, 'senha'> & { ultimo_login?: Date };
