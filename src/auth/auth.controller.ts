@@ -39,7 +39,7 @@ export class AuthController {
 
   @Public()
   @HttpCode(HttpStatus.OK)
-  @Throttle({ login: { limit: 5, ttl: 900_000 } })
+  @Throttle({ default: { limit: 5, ttl: 900_000 } })
   @Post('login')
   @ApiOperation({ summary: 'Login com email e senha; define cookie de refresh' })
   @ApiBody({
@@ -85,7 +85,7 @@ export class AuthController {
 
   @Public()
   @HttpCode(HttpStatus.OK)
-  @Throttle({ login: { limit: 5, ttl: 900_000 } })
+  @Throttle({ default: { limit: 20, ttl: 900_000 } })
   @Post('refresh')
   @ApiOperation({ summary: 'Renova access token via cookie refresh_token' })
   @ApiOkResponse({

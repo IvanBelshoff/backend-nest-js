@@ -86,15 +86,19 @@ export class AiAdminToolsService {
       page?: number;
       limit?: number;
       filter?: string;
+      nome?: string;
+      sobrenome?: string;
       bloqueado?: boolean;
     } = {},
   ): Promise<{ total: number; usuarios: AiAdminUserSummary[] }> {
     await this.assertCanManageUsers(userId);
 
+    const resolvedFilter = this.resolveUserListFilter(params);
+
     const { data, total } = await this.usersService.findAllPaginated({
       page: params.page ?? 1,
       limit: params.limit ?? 50,
-      filter: params.filter,
+      filter: resolvedFilter,
       bloqueado: params.bloqueado,
     });
 
@@ -102,6 +106,20 @@ export class AiAdminToolsService {
       total,
       usuarios: data.map((user) => this.sanitizeUser(user)),
     };
+  }
+
+  private resolveUserListFilter(params: {
+    filter?: string;
+    nome?: string;
+    sobrenome?: string;
+  }): string | undefined {
+    const nome = params.nome?.trim();
+    const sobrenome = params.sobrenome?.trim();
+    if (nome || sobrenome) {
+      return [nome, sobrenome].filter(Boolean).join(' ');
+    }
+    const filter = params.filter?.trim();
+    return filter && filter.length > 0 ? filter : undefined;
   }
 
   /**

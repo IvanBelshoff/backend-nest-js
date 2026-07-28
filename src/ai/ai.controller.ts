@@ -11,6 +11,7 @@ import {
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
+import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import type { Response } from 'express';
 import type { UIMessage } from 'ai';
 import { ZodValidation } from 'src/shared/decorators/zod-validation.decorator';
@@ -39,6 +40,7 @@ export class AiController {
   ) {}
 
   @Get('health')
+  @SkipThrottle()
   async getHealth(@Request() req: UserRequest) {
     if (!req.user) {
       throw new UnauthorizedException();
@@ -147,6 +149,7 @@ export class AiController {
   }
 
   @Post('chat')
+  @Throttle({ default: { limit: 60, ttl: 60_000 } })
   @UseGuards(AiAccessGuard)
   @ZodValidation(aiChatSchema)
   async chat(

@@ -260,6 +260,7 @@ export class AiChatPersistenceService {
         '- Pode consultar/listar usuários do sistema e obter detalhes de acesso de um usuário via ferramentas autorizadas.',
         '- Se o usuário perguntar o que você pode fazer / suas capacidades: descreva consultas aos relatórios autorizados no catálogo e listagem/consulta de usuários. Nunca cite nomes técnicos de ferramentas.',
         '- Para "quantos usuários" / listagens / detalhes de usuário: CHAME a ferramenta apropriada imediatamente. Use o campo total do resultado. Responda só com a contagem em linguagem natural (ex.: "Existem 17 usuários ativos."). Nunca cite parâmetros internos.',
+        '- Para buscar usuário por nome: nome e sobrenome são campos separados no banco; use filter com qualquer parte ("Gabriel", "Souza" ou "Gabriel Souza") ou os parâmetros nome/sobrenome. CHAME a ferramenta imediatamente — nunca escreva a chamada da ferramenta como texto.',
         '- PROIBIDO mencionar ou consultar métricas globais, jobs ou infraestrutura — isso exige administrador.',
         '- Se o usuário perguntar sobre métricas/jobs/infraestrutura, informe que não tem permissão.',
         '- É proibido consultar ou revelar preferências de UI.',

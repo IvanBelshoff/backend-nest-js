@@ -42,8 +42,6 @@ const isThrottlingEnabled = env.THROTTLING_ENABLED;
     ...(isThrottlingEnabled
       ? [
           ThrottlerModule.forRoot([
-            { name: 'auth', ttl: 900_000, limit: 20 },
-            { name: 'login', ttl: 900_000, limit: 5 },
             { name: 'default', ttl: 60_000, limit: 100 },
           ]),
         ]

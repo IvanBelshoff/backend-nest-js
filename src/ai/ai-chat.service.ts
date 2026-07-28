@@ -23,6 +23,30 @@ import { AiThreadTitleService } from './ai-thread-title.service';
 import { extractTextFromUIMessage } from './ai-thread-title.util';
 import type { AiMentionDto } from './dto/ai-chat.dto';
 
+/** Extrai nome/args de tool-call vazada em XML (formato comum no Ollama). */
+function tryParseLeakedFunctionXml(
+  text: string,
+): { name: string; args: Record<string, string> } | null {
+  const trimmed = text.trim();
+  if (!/<\/?function=/i.test(trimmed)) {
+    return null;
+  }
+
+  const nameMatch = trimmed.match(/<function=([^>\s]+)>/i);
+  if (!nameMatch?.[1]) {
+    return null;
+  }
+
+  const args: Record<string, string> = {};
+  const paramRegex = /<parameter=(\w+)>\s*([\s\S]*?)\s*<\/parameter>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = paramRegex.exec(trimmed)) !== null) {
+    args[match[1]] = match[2].trim();
+  }
+
+  return { name: nameMatch[1].trim(), args };
+}
+
 /** Detecta tool-call vazado como texto (comum em modelos Ollama / Nemotron). */
 function looksLikeLeakedToolCallJson(text: string): boolean {
   const trimmed = text.trim();
@@ -127,34 +151,137 @@ function asksCapabilityQuestion(text: string): boolean {
   );
 }
 
-function redactToolNamesFromUiMessageStream<T extends Record<string, unknown>>(
+function createSanitizedUiMessageStream<T extends Record<string, unknown>>(
   stream: ReadableStream<T>,
+  onLeakedText: (text: string) => Promise<string>,
 ): ReadableStream<T> {
+  const textBuffers = new Map<string, string>();
+  const heldStarts = new Map<string, T[]>();
+  const suppressedIds = new Set<string>();
+
   return stream.pipeThrough(
     new TransformStream<T, T>({
-      transform(chunk, controller) {
+      async transform(chunk, controller) {
         if (!chunk || typeof chunk !== 'object') {
           controller.enqueue(chunk);
           return;
         }
 
-        if (typeof chunk.delta === 'string') {
-          controller.enqueue({
-            ...chunk,
-            delta: redactInternalLeakageInText(redactToolNamesInText(chunk.delta), {
-              collapseWhitespace: false,
-            }),
-          });
+        const record = chunk as Record<string, unknown>;
+        const messageId =
+          typeof record.id === 'string' ? record.id : undefined;
+        const chunkType =
+          typeof record.type === 'string' ? record.type : undefined;
+
+        if (messageId && suppressedIds.has(messageId)) {
+          if (chunkType === 'text-end') {
+            controller.enqueue(chunk);
+          }
           return;
         }
 
-        if (typeof chunk.text === 'string') {
+        if (chunkType === 'text-start' && messageId) {
+          const held = heldStarts.get(messageId) ?? [];
+          held.push(chunk);
+          heldStarts.set(messageId, held);
+          return;
+        }
+
+        if (typeof record.delta === 'string' && messageId) {
+          const accumulated =
+            (textBuffers.get(messageId) ?? '') + record.delta;
+          textBuffers.set(messageId, accumulated);
+
+          if (looksLikeLeakedToolCallJson(accumulated)) {
+            suppressedIds.add(messageId);
+            textBuffers.delete(messageId);
+            const starts = heldStarts.get(messageId) ?? [];
+            heldStarts.delete(messageId);
+
+            let safeText: string;
+            try {
+              safeText = await onLeakedText(accumulated);
+            } catch {
+              safeText = sanitizeAssistantText(accumulated);
+            }
+            if (!safeText.trim()) {
+              safeText = sanitizeAssistantText(accumulated);
+            }
+
+            for (const start of starts) {
+              controller.enqueue(start);
+            }
+            controller.enqueue({
+              ...chunk,
+              delta: safeText,
+            } as T);
+          }
+          return;
+        }
+
+        if (chunkType === 'text-end' && messageId) {
+          const accumulated = textBuffers.get(messageId) ?? '';
+          textBuffers.delete(messageId);
+          const starts = heldStarts.get(messageId) ?? [];
+          heldStarts.delete(messageId);
+
+          let safeText = sanitizeAssistantText(
+            redactInternalLeakageInText(redactToolNamesInText(accumulated), {
+              collapseWhitespace: true,
+            }),
+          );
+
+          if (looksLikeLeakedToolCallJson(accumulated)) {
+            try {
+              const recovered = await onLeakedText(accumulated);
+              if (recovered.trim()) {
+                safeText = recovered;
+              }
+            } catch {
+              // mantém mensagem sanitizada
+            }
+          }
+
+          for (const start of starts) {
+            controller.enqueue(start);
+          }
+          if (safeText) {
+            controller.enqueue({
+              type: 'text-delta',
+              id: messageId,
+              delta: safeText,
+            } as unknown as T);
+          }
+          controller.enqueue(chunk);
+          return;
+        }
+
+        if (typeof record.text === 'string') {
+          let safeText = sanitizeAssistantText(record.text);
+          if (looksLikeLeakedToolCallJson(record.text)) {
+            try {
+              const recovered = await onLeakedText(record.text);
+              if (recovered.trim()) {
+                safeText = recovered;
+              }
+            } catch {
+              // mantém mensagem sanitizada
+            }
+          }
           controller.enqueue({
             ...chunk,
-            text: redactInternalLeakageInText(redactToolNamesInText(chunk.text), {
+            text: safeText,
+          } as T);
+          return;
+        }
+
+        if (typeof record.delta === 'string') {
+          controller.enqueue({
+            ...chunk,
+            delta: redactInternalLeakageInText(redactToolNamesInText(record.delta), {
               collapseWhitespace: false,
             }),
-          });
+          } as T);
           return;
         }
 
@@ -331,7 +458,13 @@ export class AiChatService {
           return;
         }
 
-        const safeText = sanitizeAssistantText(text);
+        let safeText = text;
+        if (looksLikeLeakedToolCallJson(text)) {
+          const recovered = await this.tryRecoverLeakedToolCall(userId, text);
+          safeText = recovered ?? sanitizeAssistantText(text);
+        } else {
+          safeText = sanitizeAssistantText(text);
+        }
 
         await this.aiChatPersistenceService.saveAssistantMessage(thread.id, {
           id: randomUUID(),
@@ -346,7 +479,11 @@ export class AiChatService {
     });
 
     const uiStream = toUIMessageStream({ stream: result.stream });
-    const redactedStream = redactToolNamesFromUiMessageStream(uiStream);
+    const redactedStream = createSanitizedUiMessageStream(uiStream, (leakedText) =>
+      this.tryRecoverLeakedToolCall(userId, leakedText).then(
+        (recovered) => recovered ?? sanitizeAssistantText(leakedText),
+      ),
+    );
 
     pipeUIMessageStreamToResponse({
       response: params.res,
@@ -482,11 +619,24 @@ export class AiChatService {
     return {
       listarUsuariosSistema: tool({
         description:
-          'Lista usuários do sistema (requer REGRA_USUARIO ou admin). Retorna { total, usuarios }. Use o campo total como quantidade real. O parâmetro limit é só tamanho de página (padrão 50) e NÃO é o total de usuários. Use filter com nome ou e-mail. Para contar apenas usuários ativos, filtre os não bloqueados via o argumento booleano correspondente — NUNCA explique esse argumento ao usuário; diga apenas "usuários ativos". Não retorna preferências de UI.',
+          'Lista usuários do sistema (requer REGRA_USUARIO ou admin). Retorna { total, usuarios }. Use o campo total como quantidade real. O parâmetro limit é só tamanho de página (padrão 50) e NÃO é o total de usuários. No banco, nome e sobrenome são campos separados — use filter com qualquer parte (ex.: "Gabriel", "Souza" ou "Gabriel Souza") ou informe nome e/ou sobrenome nos parâmetros dedicados. Para contar apenas usuários ativos, filtre os não bloqueados via o argumento booleano correspondente — NUNCA explique esse argumento ao usuário; diga apenas "usuários ativos". Não retorna preferências de UI.',
         inputSchema: z.object({
           page: z.number().int().positive().optional(),
           limit: z.number().int().positive().max(100).optional(),
-          filter: z.string().optional(),
+          filter: z
+            .string()
+            .optional()
+            .describe(
+              'Busca por nome, sobrenome, nome completo ou e-mail. Ex.: "Gabriel" ou "Gabriel Souza".',
+            ),
+          nome: z
+            .string()
+            .optional()
+            .describe('Primeiro nome (campo separado no banco).'),
+          sobrenome: z
+            .string()
+            .optional()
+            .describe('Sobrenome (campo separado no banco).'),
           bloqueado: z
             .boolean()
             .optional()
@@ -595,5 +745,68 @@ export class AiChatService {
           this.aiAdminToolsService.listScheduleExecutions(userId, params),
       }),
     };
+  }
+
+  private async tryRecoverLeakedToolCall(
+    userId: number,
+    leakedText: string,
+  ): Promise<string | null> {
+    const parsed = tryParseLeakedFunctionXml(leakedText);
+    if (!parsed) {
+      return null;
+    }
+
+    if (parsed.name !== 'listarUsuariosSistema') {
+      return null;
+    }
+
+    const filter =
+      parsed.args.filter?.trim() ||
+      [parsed.args.nome, parsed.args.sobrenome]
+        .filter((part) => typeof part === 'string' && part.trim().length > 0)
+        .join(' ')
+        .trim() ||
+      undefined;
+
+    const bloqueado =
+      parsed.args.bloqueado === 'true'
+        ? true
+        : parsed.args.bloqueado === 'false'
+          ? false
+          : undefined;
+
+    const result = await this.aiAdminToolsService.listUsers(userId, {
+      filter,
+      nome: parsed.args.nome,
+      sobrenome: parsed.args.sobrenome,
+      bloqueado,
+    });
+
+    return this.formatListUsersRecovery(result, filter);
+  }
+
+  private formatListUsersRecovery(
+    result: { total: number; usuarios: Array<{ nome: string; sobrenome: string; email: string }> },
+    filter?: string,
+  ): string {
+    if (result.total === 0) {
+      const term = filter?.trim();
+      return term
+        ? `Não encontrei usuário cadastrado com o nome ou e-mail "${term}".`
+        : 'Não encontrei usuários com esse critério.';
+    }
+
+    if (result.total === 1) {
+      const user = result.usuarios[0];
+      return `Sim, existe o usuário ${user.nome} ${user.sobrenome} (${user.email}).`;
+    }
+
+    const preview = result.usuarios
+      .slice(0, 10)
+      .map((user) => `${user.nome} ${user.sobrenome}`)
+      .join(', ');
+    const suffix =
+      result.total > 10 ? ` e mais ${result.total - 10} usuário(s)` : '';
+    return `Encontrei ${result.total} usuários: ${preview}${suffix}.`;
   }
 }
