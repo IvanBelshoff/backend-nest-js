@@ -13,7 +13,7 @@ import {
   DASHBOARD_ROLE_NAME,
 } from './ai-access.service';
 import { AiReportToolsService } from './ai-report-tools.service';
-import type { AiMentionDto } from './dto/ai-chat.dto';
+import type { AiChatMode, AiMentionDto } from './dto/ai-chat.dto';
 
 export type AiMentionRelatorioItem = {
   id: number;
@@ -60,10 +60,13 @@ export class AiMentionService {
   async buildMentionsPromptSection(
     userId: number,
     mentions: AiMentionDto[],
+    options: { mode?: AiChatMode } = {},
   ): Promise<string> {
     if (mentions.length === 0) {
       return '';
     }
+
+    const isAnalytic = options.mode === 'analitico';
 
     const lines = [
       '',
@@ -72,14 +75,37 @@ export class AiMentionService {
       'Priorize estes alvos ao responder e ao escolher ferramentas. Use IDs apenas internamente; ao usuário mostre só nomes.',
     ];
 
+    if (isAnalytic) {
+      lines.push(
+        'MODO ANALÍTICO: abaixo há apenas metadados (nomes, colunas, estado). Nenhuma contagem ou valor foi pré-calculado de propósito — obtenha todo número via ferramentas analíticas.',
+      );
+    }
+
     for (const mention of mentions) {
       switch (mention.type) {
-        case 'relatorio':
+        case 'relatorio': {
+          if (isAnalytic) {
+            lines.push(
+              ...(await this.buildAnalyticReportMetadataLines(
+                userId,
+                mention.id!,
+                mention.label,
+              )),
+            );
+            break;
+          }
+
           lines.push(
             `- Relatório destacado: "${mention.label}" (id interno ${mention.id})`,
           );
           break;
+        }
         case 'dashboard': {
+          if (isAnalytic) {
+            lines.push(`- Dashboard destacado: "${mention.label}"`);
+            break;
+          }
+
           const dashboard = await this.dashboardService.findById(
             mention.id!,
             userId,
@@ -105,6 +131,14 @@ export class AiMentionService {
           );
           break;
         case 'dominio_relatorios': {
+          if (isAnalytic) {
+            lines.push(
+              '- Domínio: Relatórios com conhecimento da IA habilitado (catálogo autorizado).',
+              '  Escolha no catálogo do prompt qual relatório analisar; se houver mais de um candidato plausível, pergunte ao usuário qual usar.',
+            );
+            break;
+          }
+
           const catalog =
             await this.aiReportToolsService.getReportCatalogForPrompt(userId);
           lines.push(
@@ -118,6 +152,14 @@ export class AiMentionService {
           lines.push('- Domínio: Dashboards acessíveis ao usuário.');
           break;
         case 'dominio_usuarios': {
+          if (isAnalytic) {
+            lines.push(
+              '- Domínio: Usuários do sistema.',
+              '  Obtenha qualquer contagem via ferramenta autorizada — nenhum número foi pré-calculado neste modo.',
+            );
+            break;
+          }
+
           const stats = await this.getUserDomainStats();
           lines.push(
             '- Domínio: Usuários do sistema.',
@@ -138,9 +180,14 @@ export class AiMentionService {
   async buildMentionUserPrefix(
     userId: number,
     mentions: AiMentionDto[],
+    options: { mode?: AiChatMode } = {},
   ): Promise<string> {
     if (mentions.length === 0) {
       return '';
+    }
+
+    if (options.mode === 'analitico') {
+      return this.buildAnalyticMentionUserPrefix(mentions);
     }
 
     const parts: string[] = [];
@@ -186,6 +233,70 @@ export class AiMentionService {
     }
 
     return parts.join(' ');
+  }
+
+  /**
+   * No modo analítico o prefixo não carrega fatos numéricos: os números precisam
+   * sair das tools analíticas para que o gráfico e o texto contem a mesma história.
+   */
+  private buildAnalyticMentionUserPrefix(mentions: AiMentionDto[]): string {
+    const targets = mentions
+      .map((mention) => {
+        switch (mention.type) {
+          case 'relatorio':
+            return `RELATÓRIO "${mention.label}" (id ${mention.id})`;
+          case 'dashboard':
+            return `DASHBOARD "${mention.label}"`;
+          case 'usuario':
+            return `USUÁRIO "${mention.label}" (id ${mention.id})`;
+          default:
+            return `domínio ${mention.label}`;
+        }
+      })
+      .join('; ');
+
+    return `[Contexto autorizado do servidor — modo analítico] Alvo da análise: ${targets}. Nenhum número foi pré-calculado: use as ferramentas analíticas para obter os valores. Se faltar definir coluna, métrica ou período, pergunte antes de analisar.`;
+  }
+
+  /** Metadados (nome, estado, colunas) de um relatório para orientar a análise. */
+  private async buildAnalyticReportMetadataLines(
+    userId: number,
+    relatorioId: number,
+    label: string,
+  ): Promise<string[]> {
+    try {
+      const report = await this.aiReportToolsService.describeReport(
+        userId,
+        relatorioId,
+      );
+      const columns = report.colunas ?? [];
+      const parameterNames = Object.keys(report.parametros ?? {});
+
+      const lines = [
+        `- Relatório destacado para análise: "${report.nome}" (id interno ${report.id}, estado ${report.estado})`,
+      ];
+
+      lines.push(
+        columns.length > 0
+          ? `  Colunas disponíveis: ${columns.join(', ')}.`
+          : '  Colunas não disponíveis nos metadados — descreva o relatório antes de analisar.',
+      );
+
+      if (parameterNames.length > 0) {
+        lines.push(`  Parâmetros aceitos: ${parameterNames.join(', ')}.`);
+      }
+
+      lines.push(
+        '  Use exatamente estes nomes de coluna nas ferramentas analíticas. Nenhum valor foi pré-calculado.',
+      );
+
+      return lines;
+    } catch {
+      return [
+        `- Relatório destacado para análise: "${label}" (id interno ${relatorioId})`,
+        '  Metadados não puderam ser carregados agora — descreva o relatório antes de analisar.',
+      ];
+    }
   }
 
   private async getUserDomainStats(): Promise<{

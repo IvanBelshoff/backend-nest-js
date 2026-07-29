@@ -166,6 +166,8 @@ export class AiController {
       messages: body.messages as unknown as UIMessage[],
       threadId: body.threadId,
       mentions: body.mentions,
+      mode: body.mode,
+      thinking: body.thinking,
       res,
     });
   }

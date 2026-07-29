@@ -13,6 +13,26 @@ const aiEnvShape = {
   AI_MODEL: z.string().min(1).default('qwen3.5:4b'),
   AI_BASE_URL: z.string().url().optional(),
   AI_API_KEY: z.string().min(1).optional(),
+  // Desligue quando o modelo configurado não suportar raciocínio estendido:
+  // o toggle "Pensamento" fica indisponível na UI em vez de falhar na chamada.
+  AI_REASONING_ENABLED: z
+    .string()
+    .optional()
+    .transform((value) => value !== 'false'),
+  AI_REASONING_EFFORT: z
+    .enum(['minimal', 'low', 'medium', 'high'])
+    .default('medium'),
+  AI_REASONING_BUDGET_TOKENS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(4096),
+  // Modelos que devolvem o raciocínio como texto puro entre <think>...</think>
+  // (comum em Ollama e servidores openai-compatible).
+  AI_REASONING_THINK_TAGS: z
+    .string()
+    .optional()
+    .transform((value) => value !== 'false'),
 };
 
 export const aiEnvSchema = z.object(aiEnvShape).superRefine((data, ctx) => {

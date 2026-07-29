@@ -5,6 +5,10 @@ import type {
   AiProviderConfig,
 } from './ai-provider.types';
 import { buildHealthResult, fetchWithTimeout } from './ai-provider.health.util';
+import {
+  isReasoningEnabled,
+  reasoningBudgetTokens,
+} from './ai-provider.reasoning.util';
 
 export function createGoogleProvider(
   config: AiProviderConfig,
@@ -16,6 +20,21 @@ export function createGoogleProvider(
   return {
     getChatModel() {
       return google(config.model);
+    },
+
+    getReasoningProviderOptions() {
+      return {
+        google: {
+          thinkingConfig: {
+            thinkingBudget: reasoningBudgetTokens(),
+            includeThoughts: true,
+          },
+        },
+      };
+    },
+
+    supportsReasoning() {
+      return isReasoningEnabled();
     },
 
     async checkHealth(): Promise<AiHealthStatus> {

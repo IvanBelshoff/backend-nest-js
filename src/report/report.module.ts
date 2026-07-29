@@ -53,6 +53,14 @@ import { UsuarioRelatorioAccessService } from './usuario-relatorio-access.servic
       useFactory: createStorageProvider,
     },
   ],
-  exports: [ReportService, ReportJobService, ReportExecutionService, SnapshotQueryService, UsuarioRelatorioAccessService],
+  exports: [
+    ReportService,
+    ReportJobService,
+    ReportExecutionService,
+    ReportSnapshotService,
+    SnapshotQueryService,
+    DuckDbService,
+    UsuarioRelatorioAccessService,
+  ],
 })
 export class ReportModule {}

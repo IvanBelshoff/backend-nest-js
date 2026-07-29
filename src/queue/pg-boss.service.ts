@@ -7,6 +7,7 @@ import {
 import { PgBoss, type JobWithMetadata, type ScheduleOptions, type SendOptions } from 'pg-boss';
 import { buildPgConnectionString } from './pg-connection.util';
 import {
+  AI_ANALYSIS_QUEUE,
   REPORT_EXPORT_QUEUE,
   REPORT_SNAPSHOT_QUEUE,
   SCHEDULER_DISPATCH_QUEUE,
@@ -80,6 +81,24 @@ export class PgBossService implements OnModuleInit, OnModuleDestroy {
       retryLimit: 2,
       retryDelay: 30,
     });
+
+    await this.boss.createQueue(AI_ANALYSIS_QUEUE, {
+      retryLimit: env.AI_ANALYSIS_RETRY_LIMIT,
+      retryDelay: 60,
+    });
+  }
+
+  private resolveConcurrency(queueName: string): number {
+    switch (queueName) {
+      case REPORT_SNAPSHOT_QUEUE:
+        return env.REPORT_SNAPSHOT_QUEUE_CONCURRENCY;
+      case SCHEDULER_DISPATCH_QUEUE:
+        return 1;
+      case AI_ANALYSIS_QUEUE:
+        return env.AI_ANALYSIS_QUEUE_CONCURRENCY;
+      default:
+        return env.REPORT_EXPORT_QUEUE_CONCURRENCY;
+    }
   }
 
   private async registerWorker(
@@ -90,12 +109,7 @@ export class PgBossService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    const concurrency =
-      queueName === REPORT_SNAPSHOT_QUEUE
-        ? env.REPORT_SNAPSHOT_QUEUE_CONCURRENCY
-        : queueName === SCHEDULER_DISPATCH_QUEUE
-          ? 1
-          : env.REPORT_EXPORT_QUEUE_CONCURRENCY;
+    const concurrency = this.resolveConcurrency(queueName);
 
     await this.boss.work(
       queueName,

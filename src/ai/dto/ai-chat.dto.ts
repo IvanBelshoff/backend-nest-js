@@ -41,11 +41,17 @@ export const aiMentionSchema = z
 
 export type AiMentionDto = z.infer<typeof aiMentionSchema>;
 
+export const aiChatModeSchema = z.enum(['normal', 'analitico']);
+
+export type AiChatMode = z.infer<typeof aiChatModeSchema>;
+
 export const aiChatSchema = z
   .object({
     messages: z.array(z.record(z.string(), z.unknown())),
     threadId: z.string().uuid().optional(),
     mentions: z.array(aiMentionSchema).max(20).optional(),
+    mode: aiChatModeSchema.default('normal'),
+    thinking: z.boolean().default(false),
   })
   .strict();
 

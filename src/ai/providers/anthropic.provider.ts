@@ -5,6 +5,10 @@ import type {
   AiProviderConfig,
 } from './ai-provider.types';
 import { buildHealthResult, fetchWithTimeout } from './ai-provider.health.util';
+import {
+  isReasoningEnabled,
+  reasoningBudgetTokens,
+} from './ai-provider.reasoning.util';
 
 export function createAnthropicProvider(
   config: AiProviderConfig,
@@ -16,6 +20,18 @@ export function createAnthropicProvider(
   return {
     getChatModel() {
       return anthropic(config.model);
+    },
+
+    getReasoningProviderOptions() {
+      return {
+        anthropic: {
+          thinking: { type: 'enabled', budgetTokens: reasoningBudgetTokens() },
+        },
+      };
+    },
+
+    supportsReasoning() {
+      return isReasoningEnabled();
     },
 
     async checkHealth(): Promise<AiHealthStatus> {

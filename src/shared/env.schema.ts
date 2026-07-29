@@ -87,6 +87,11 @@ export const envSchema = z.object({
     .string()
     .min(1)
     .default('scheduler.dispatch'),
+  AI_ANALYSIS_QUEUE_NAME: z.string().min(1).default('ai.analysis'),
+  // Uma análise por vez por padrão: cada job consome o provedor de IA inteiro.
+  AI_ANALYSIS_QUEUE_CONCURRENCY: z.coerce.number().int().positive().default(1),
+  // Reprocessar custa outra rodada de LLM, então o padrão é não repetir.
+  AI_ANALYSIS_RETRY_LIMIT: z.coerce.number().int().nonnegative().default(0),
   REPORT_EXPORT_DIR: z.string().min(1).default('src/shared/data/exports'),
   REPORT_EXPORT_TTL_HOURS: z.coerce.number().int().positive().default(24),
   STORAGE_DRIVER: z.enum(['local']).default('local'),
@@ -122,6 +127,8 @@ export const envSchema = z.object({
     .transform((value) => value !== 'false'),
   AI_MAX_REPORT_ROWS: z.coerce.number().int().positive().default(100),
   AI_MAX_STEPS: z.coerce.number().int().positive().default(5),
+  // A análise em fila não trava conexão HTTP, então pode dar mais passos.
+  AI_ANALYSIS_MAX_STEPS: z.coerce.number().int().positive().default(10),
 }).and(aiEnvSchema);
 
 export type Env = z.infer<typeof envSchema>;

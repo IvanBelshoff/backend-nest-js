@@ -1,7 +1,7 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-export class Default1785156992187 implements MigrationInterface {
-    name = 'Default1785156992187'
+export class Default1785285649751 implements MigrationInterface {
+    name = 'Default1785285649751'
 
     public async up(queryRunner: QueryRunner): Promise<void> {
         await queryRunner.query(`CREATE TABLE "fotos" ("id" SERIAL NOT NULL, "nome" text NOT NULL, "originalname" text NOT NULL, "tipo" text NOT NULL, "tamanho" integer NOT NULL, "local" text NOT NULL, "url" text NOT NULL, "data_criacao" date NOT NULL DEFAULT now(), "data_atualizacao" date NOT NULL DEFAULT ('now'::text)::timestamp(6) with time zone, CONSTRAINT "PK_929dc0abc9924e9f2797dbca023" PRIMARY KEY ("id"))`);
@@ -31,7 +31,7 @@ export class Default1785156992187 implements MigrationInterface {
         await queryRunner.query(`CREATE INDEX "IDX_agendamento_vinculos_agendamento_id" ON "agendamento_vinculos"  ("agendamento_id") `);
         await queryRunner.query(`CREATE TYPE "public"."agendamentos_frequencia_enum" AS ENUM('minuto', 'hora', 'dia', 'semana', 'mes')`);
         await queryRunner.query(`CREATE TABLE "agendamentos" ("id" BIGSERIAL NOT NULL, "nome" text NOT NULL, "ativo" boolean NOT NULL DEFAULT true, "intervalo" integer NOT NULL DEFAULT '1', "frequencia" "public"."agendamentos_frequencia_enum" NOT NULL, "timezone" text NOT NULL DEFAULT 'America/Sao_Paulo', "hora_inicio" TIMESTAMP WITH TIME ZONE, "dias_semana" smallint array NOT NULL DEFAULT '{}', "horas" smallint array NOT NULL DEFAULT '{}', "minutos" smallint array NOT NULL DEFAULT '{0}', "cron_expression" text NOT NULL, "proxima_execucao" TIMESTAMP WITH TIME ZONE, "ultima_execucao" TIMESTAMP WITH TIME ZONE, "usuario_cadastrador" text, "usuario_atualizador" text, "data_criacao" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "data_atualizacao" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_3890b7448ebc7efdfd1d43bf0c7" PRIMARY KEY ("id"))`);
-        await queryRunner.query(`CREATE TYPE "public"."user_notifications_type_enum" AS ENUM('export_ready', 'export_failed', 'snapshot_ready', 'snapshot_failed')`);
+        await queryRunner.query(`CREATE TYPE "public"."user_notifications_type_enum" AS ENUM('export_ready', 'export_failed', 'snapshot_ready', 'snapshot_failed', 'ai_analysis_ready', 'ai_analysis_failed')`);
         await queryRunner.query(`CREATE TABLE "user_notifications" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "user_id" bigint NOT NULL, "type" "public"."user_notifications_type_enum" NOT NULL, "title" text NOT NULL, "body" text NOT NULL, "payload" jsonb NOT NULL DEFAULT '{}', "read_at" TIMESTAMP WITH TIME ZONE, "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_569622b0fd6e6ab3661de985a2b" PRIMARY KEY ("id"))`);
         await queryRunner.query(`CREATE INDEX "IDX_user_notifications_user_id_read_at" ON "user_notifications"  ("user_id", "read_at") `);
         await queryRunner.query(`CREATE INDEX "IDX_user_notifications_user_id_created_at" ON "user_notifications"  ("user_id", "created_at") `);

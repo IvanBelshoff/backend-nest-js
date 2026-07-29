@@ -205,6 +205,31 @@ export class DuckDbService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  /**
+   * Executa SQL de agregação sobre um Parquet, respeitando o limite de
+   * concorrência e o timeout padrão.
+   *
+   * `buildSql` recebe a expressão de leitura do arquivo já como literal seguro e
+   * devolve o SQL completo. Nomes de coluna interpolados pelo chamador precisam
+   * passar por `quoteIdentifier` contra a whitelist de colunas do snapshot;
+   * valores devem ir por parâmetros posicionais.
+   */
+  async runAggregation(
+    parquetPath: string,
+    buildSql: (source: string) => string,
+    params: (string | number | boolean | null)[] = [],
+  ): Promise<Record<string, unknown>[]> {
+    const source = `read_parquet(${sqlPathLiteral(parquetPath)})`;
+    const sql = buildSql(source);
+
+    return this.withConnection(async (conn) => {
+      const reader = await conn.runAndReadAll(sql, params);
+      return reader
+        .getRowObjectsJS()
+        .map((row) => normalizeRow(row as Record<string, unknown>));
+    });
+  }
+
   /** Exporta o conteúdo de um Parquet para CSV via COPY (streaming nativo). */
   async copyToCsv(parquetPath: string, outCsvPath: string): Promise<void> {
     const src = sqlPathLiteral(parquetPath);

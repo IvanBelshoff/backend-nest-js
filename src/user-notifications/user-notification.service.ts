@@ -18,6 +18,8 @@ import { ReportJobService } from 'src/report/jobs/report-job.service';
 import type { ListUserNotificationsQueryDto } from './dto/list-user-notifications-query.dto';
 import type { UserNotificationPayloadDto } from './dto/user-notification-payload.dto';
 import {
+  buildAiAnalysisNotificationContent,
+  buildAiAnalysisNotificationPayload,
   buildNotificationContent,
   buildNotificationPayload,
 } from './user-notification-content';
@@ -51,11 +53,7 @@ export class UserNotificationService {
     job: RelatorioJob,
     relatorio: Pick<Relatorio, 'id' | 'nome'> | null,
   ): Promise<UserNotification | null> {
-    const existing = await this.notificationRepository
-      .createQueryBuilder('notification')
-      .where('notification.user_id = :userId', { userId: job.userId })
-      .andWhere("notification.payload->>'jobId' = :jobId", { jobId: job.id })
-      .getOne();
+    const existing = await this.findByJobId(job.userId, job.id);
 
     if (existing) {
       return existing;
@@ -81,6 +79,34 @@ export class UserNotificationService {
         downloadAvailable,
         origem,
       ),
+      readAt: null,
+    });
+
+    return this.notificationRepository.save(notification);
+  }
+
+  /** Notifica o fim de uma análise em fila do assistente, com deep-link ao thread. */
+  async createFromAiAnalysis(params: {
+    userId: number;
+    threadId: string;
+    jobId: string;
+    pergunta: string;
+    errorMessage?: string | null;
+  }): Promise<UserNotification> {
+    const existing = await this.findByJobId(params.userId, params.jobId);
+
+    if (existing) {
+      return existing;
+    }
+
+    const { type, title, body } = buildAiAnalysisNotificationContent(params);
+
+    const notification = this.notificationRepository.create({
+      userId: params.userId,
+      type,
+      title,
+      body,
+      payload: buildAiAnalysisNotificationPayload(params),
       readAt: null,
     });
 
@@ -149,13 +175,30 @@ export class UserNotificationService {
       .execute();
   }
 
+  private findByJobId(
+    userId: number,
+    jobId: string,
+  ): Promise<UserNotification | null> {
+    return this.notificationRepository
+      .createQueryBuilder('notification')
+      .where('notification.user_id = :userId', { userId })
+      .andWhere("notification.payload->>'jobId' = :jobId", { jobId })
+      .getOne();
+  }
+
   private toItem(notification: UserNotification): UserNotificationItem {
+    const payload = notification.payload ?? {};
+
     return {
       id: notification.id,
       type: notification.type,
       title: notification.title,
       body: notification.body,
-      payload: (notification.payload ?? {}) as UserNotificationPayloadDto,
+      // Notificações criadas antes do campo `kind` são todas de job de relatório.
+      payload: {
+        kind: 'report_job',
+        ...payload,
+      } as UserNotificationPayloadDto,
       readAt: notification.readAt,
       createdAt: notification.createdAt,
     };

@@ -1,5 +1,6 @@
 import { createOllama } from 'ai-sdk-ollama';
 import type {
+  AiChatModelOptions,
   AiHealthStatus,
   AiProviderAdapter,
   AiProviderConfig,
@@ -9,6 +10,10 @@ import {
   fetchWithTimeout,
   isConfiguredModelListed,
 } from './ai-provider.health.util';
+import {
+  isReasoningEnabled,
+  withThinkTagExtraction,
+} from './ai-provider.reasoning.util';
 
 export function createOllamaProvider(
   config: AiProviderConfig,
@@ -17,8 +22,19 @@ export function createOllamaProvider(
   const ollama = createOllama({ baseURL: baseUrl });
 
   return {
-    getChatModel() {
-      return ollama(config.model, { think: false });
+    getChatModel(options?: AiChatModelOptions) {
+      const thinking = Boolean(options?.thinking) && isReasoningEnabled();
+
+      return withThinkTagExtraction(ollama(config.model, { think: thinking }));
+    },
+
+    getReasoningProviderOptions() {
+      // O raciocínio do Ollama é ligado pelo parâmetro `think` do modelo.
+      return undefined;
+    },
+
+    supportsReasoning() {
+      return isReasoningEnabled();
     },
 
     async checkHealth(): Promise<AiHealthStatus> {

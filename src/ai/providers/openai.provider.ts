@@ -10,6 +10,11 @@ import {
   fetchWithTimeout,
   isConfiguredModelListed,
 } from './ai-provider.health.util';
+import {
+  isReasoningEnabled,
+  reasoningEffort,
+  withThinkTagExtraction,
+} from './ai-provider.reasoning.util';
 
 function createOpenAiProvider(
   config: AiProviderConfig,
@@ -22,7 +27,22 @@ function createOpenAiProvider(
 
   return {
     getChatModel() {
-      return openAi.chat(config.model);
+      return withThinkTagExtraction(openAi.chat(config.model));
+    },
+
+    getReasoningProviderOptions() {
+      // `reasoningEffort` é uma opção da API oficial da OpenAI; servidores
+      // openai-compatible costumam rejeitá-la, então só enviamos no provedor
+      // oficial e deixamos a extração de <think> cuidar do resto.
+      if (provider !== 'openai') {
+        return undefined;
+      }
+
+      return { openai: { reasoningEffort: reasoningEffort() } };
+    },
+
+    supportsReasoning() {
+      return isReasoningEnabled();
     },
 
     async checkHealth(): Promise<AiHealthStatus> {

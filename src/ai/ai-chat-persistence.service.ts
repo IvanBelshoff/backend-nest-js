@@ -17,6 +17,7 @@ import {
   MAX_THREAD_TITLE_LENGTH,
   sanitizeGeneratedTitle,
 } from './ai-thread-title.util';
+import type { AiChatMode } from './dto/ai-chat.dto';
 
 export { DEFAULT_THREAD_TITLE };
 
@@ -175,6 +176,27 @@ export class AiChatPersistenceService {
     return this.messageRepository.save(entity);
   }
 
+  /**
+   * Indica se o desfecho de uma análise em fila já foi gravado no thread. Serve
+   * para não empilhar bolhas repetidas quando o pg-boss reprocessa o job.
+   */
+  async hasAnalysisOutcome(
+    threadId: string,
+    jobId: string,
+    status: 'done' | 'failed',
+  ): Promise<boolean> {
+    const total = await this.messageRepository
+      .createQueryBuilder('message')
+      .where('message.thread_id = :threadId', { threadId })
+      .andWhere("message.metadata #>> '{analysis,jobId}' = :jobId", { jobId })
+      .andWhere("message.metadata #>> '{analysis,status}' = :status", {
+        status,
+      })
+      .getCount();
+
+    return total > 0;
+  }
+
   async deleteThread(userId: number, threadId: string): Promise<void> {
     await this.assertThreadOwnership(userId, threadId);
     await this.threadRepository.delete({ id: threadId, userId });
@@ -198,6 +220,7 @@ export class AiChatPersistenceService {
       isAdmin: boolean;
       canManageUsers?: boolean;
       mentionsSection?: string;
+      mode?: AiChatMode;
     } = {
       isAdmin: false,
       canManageUsers: false,
@@ -272,6 +295,21 @@ export class AiChatPersistenceService {
         '- Se o usuário perguntar o que você pode fazer / suas capacidades: descreva APENAS consultas aos relatórios autorizados no catálogo abaixo (listar, descrever e interpretar dados). Nunca cite nomes técnicos de ferramentas.',
         '- PROIBIDO mencionar capacidades administrativas (usuários do sistema, métricas globais, jobs, infraestrutura ou gestão de acessos) — mesmo para dizer que "em geral o assistente faz isso".',
         '- Se o usuário perguntar sobre dados administrativos do sistema (usuários, métricas, jobs globais, etc.), informe que não tem permissão.',
+      );
+    }
+
+    if (options.mode === 'analitico') {
+      lines.push(
+        '',
+        'MODO ANALÍTICO ATIVO — atue como analista de dados sênior.',
+        '- Objetivo: gerar insight, não apenas repetir números. Estruture a resposta em: (1) resposta direta à pergunta, (2) evidências numéricas com a fonte, (3) o que isso significa e o que fazer a seguir.',
+        '- Todo número deve vir de ferramenta analítica (tendência, correlação, outliers, distribuição, comparação de períodos) ou de consulta de relatório. PROIBIDO estimar, arredondar de cabeça ou inferir valores que você não obteve.',
+        '- Se a pergunta for ambígua quanto a relatório, coluna, métrica ou período, faça 1 ou 2 perguntas curtas de esclarecimento ANTES de rodar a análise. Se o contexto já for suficiente, execute direto sem perguntar.',
+        '- Quando a ferramenta analítica retornar um gráfico, ele é renderizado automaticamente na conversa: comente o que o gráfico mostra, mas não descreva eixos ponto a ponto nem tente desenhar gráficos em texto/ASCII/markdown.',
+        '- Sempre informe o relatório de origem e o período analisado.',
+        '- Aponte limitações quando existirem: amostra pequena, snapshot possivelmente desatualizado, sazonalidade não controlada. Correlação não implica causalidade — nunca afirme causa sem evidência.',
+        '- Análises pesadas (vários relatórios, várias métricas combinadas, histórico longo, muitas etapas) devem ir para a fila de análise em segundo plano: chame a ferramenta de agendamento e avise ao usuário que ele pode continuar navegando e será notificado. Uma estatística única e simples deve ser rodada na hora, sem fila.',
+        '- Não invente colunas: confirme os nomes reais via metadados do relatório antes de analisar.',
       );
     }
 

@@ -3,3 +3,4 @@ import { env } from 'src/shared/env.schema';
 export const REPORT_SNAPSHOT_QUEUE = env.REPORT_SNAPSHOT_QUEUE_NAME;
 export const REPORT_EXPORT_QUEUE = env.REPORT_EXPORT_QUEUE_NAME;
 export const SCHEDULER_DISPATCH_QUEUE = env.SCHEDULER_DISPATCH_QUEUE_NAME;
+export const AI_ANALYSIS_QUEUE = env.AI_ANALYSIS_QUEUE_NAME;

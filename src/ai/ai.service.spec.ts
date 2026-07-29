@@ -1,5 +1,13 @@
+// O pacote `ai` é ESM-only e não passa pelo transform CommonJS do ts-jest.
+jest.mock('ai', () => ({
+  extractReasoningMiddleware: jest.fn(() => ({})),
+  wrapLanguageModel: jest.fn(({ model }: { model: unknown }) => model),
+}));
+
+const ollamaModel = jest.fn(() => 'ollama-model');
+
 jest.mock('ai-sdk-ollama', () => ({
-  createOllama: jest.fn(() => jest.fn(() => 'ollama-model')),
+  createOllama: jest.fn(() => ollamaModel),
 }));
 
 jest.mock('@ai-sdk/openai', () => ({
@@ -22,6 +30,10 @@ jest.mock('src/shared/env.schema', () => ({
     AI_BASE_URL: 'http://localhost:11434',
     AI_MODEL: 'qwen3.5:4b',
     AI_API_KEY: undefined,
+    AI_REASONING_ENABLED: true,
+    AI_REASONING_EFFORT: 'medium',
+    AI_REASONING_BUDGET_TOKENS: 4096,
+    AI_REASONING_THINK_TAGS: true,
   },
 }));
 
@@ -47,6 +59,7 @@ describe('AiService', () => {
     expect(result.available).toBe(true);
     expect(result.provider).toBe('ollama');
     expect(result.model).toBe('qwen3.5:4b');
+    expect(result.supportsReasoning).toBe(true);
     expect(result.latencyMs).toBeGreaterThanOrEqual(0);
     expect(result.error).toBeUndefined();
     expect(global.fetch).toHaveBeenCalledWith(
@@ -88,7 +101,22 @@ describe('AiService', () => {
     expect(result.error).toBe('ECONNREFUSED');
   });
 
+  it('returns unavailable with reasoning disabled when fetch fails', async () => {
+    global.fetch = jest.fn().mockRejectedValue(new Error('ECONNREFUSED'));
+
+    const result = await service.checkHealth();
+
+    expect(result.supportsReasoning).toBe(false);
+  });
+
   it('returns chat model from provider adapter', () => {
     expect(service.getChatModel()).toBe('ollama-model');
+    expect(ollamaModel).toHaveBeenLastCalledWith('qwen3.5:4b', { think: false });
+  });
+
+  it('enables Ollama think parameter when thinking is requested', () => {
+    service.getChatModel({ thinking: true });
+
+    expect(ollamaModel).toHaveBeenLastCalledWith('qwen3.5:4b', { think: true });
   });
 });

@@ -13,6 +13,7 @@ export function buildHealthResult(params: {
   model: string;
   startedAt: number;
   error?: string;
+  supportsReasoning?: boolean;
 }): import('./ai-provider.types').AiHealthStatus {
   return {
     available: params.available,
@@ -20,6 +21,7 @@ export function buildHealthResult(params: {
     model: params.model,
     latencyMs: Math.round(performance.now() - params.startedAt),
     error: params.error,
+    supportsReasoning: params.supportsReasoning ?? false,
   };
 }
 

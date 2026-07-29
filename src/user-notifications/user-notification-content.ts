@@ -5,7 +5,10 @@ import {
   RelatorioJobTipo,
 } from 'src/database/entities/RelatorioJobs';
 import { UserNotificationType } from 'src/database/entities/UserNotification';
-import type { UserNotificationPayloadDto } from './dto/user-notification-payload.dto';
+import type {
+  AiAnalysisNotificationPayloadDto,
+  ReportJobNotificationPayloadDto,
+} from './dto/user-notification-payload.dto';
 
 export function buildParametrosResumo(
   parametros: Record<string, unknown>,
@@ -41,8 +44,9 @@ export function buildNotificationPayload(
   relatorioNome: string,
   downloadAvailable: boolean,
   origem: 'manual' | 'agendado' | null,
-): UserNotificationPayloadDto {
+): ReportJobNotificationPayloadDto {
   return {
+    kind: 'report_job',
     jobId: job.id,
     relatorioId: Number(job.relatorioId),
     relatorioNome,
@@ -93,5 +97,54 @@ export function buildNotificationContent(
     body:
       job.errorMessage ??
       `Não foi possível atualizar o snapshot do relatório "${relatorioNome}".`,
+  };
+}
+
+const MAX_ANALYSIS_SUBJECT_LENGTH = 80;
+
+/** Resume a pergunta para caber no título da notificação. */
+function buildAnalysisSubject(pergunta: string): string {
+  const normalized = pergunta.replace(/\s+/g, ' ').trim();
+
+  return normalized.length > MAX_ANALYSIS_SUBJECT_LENGTH
+    ? `${normalized.slice(0, MAX_ANALYSIS_SUBJECT_LENGTH - 3)}...`
+    : normalized;
+}
+
+export function buildAiAnalysisNotificationPayload(params: {
+  jobId: string;
+  threadId: string;
+  pergunta: string;
+  errorMessage?: string | null;
+}): AiAnalysisNotificationPayloadDto {
+  return {
+    kind: 'ai_analysis',
+    jobId: params.jobId,
+    threadId: params.threadId,
+    status: params.errorMessage ? 'failed' : 'completed',
+    pergunta: params.pergunta,
+    errorMessage: params.errorMessage ?? null,
+    completedAt: new Date().toISOString(),
+  };
+}
+
+export function buildAiAnalysisNotificationContent(params: {
+  pergunta: string;
+  errorMessage?: string | null;
+}): { type: UserNotificationType; title: string; body: string } {
+  const subject = buildAnalysisSubject(params.pergunta);
+
+  if (params.errorMessage) {
+    return {
+      type: UserNotificationType.AI_ANALYSIS_FAILED,
+      title: 'Falha na análise do assistente',
+      body: `Não foi possível concluir a análise "${subject}". ${params.errorMessage}`.trim(),
+    };
+  }
+
+  return {
+    type: UserNotificationType.AI_ANALYSIS_READY,
+    title: 'Análise concluída',
+    body: `A análise "${subject}" está pronta na conversa do assistente.`,
   };
 }
