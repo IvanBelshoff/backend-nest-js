@@ -12,6 +12,7 @@ describe('AiAdminToolsService', () => {
     findAllPaginated: jest.fn(),
     findByIdWithRelations: jest.fn(),
     findByIdWithAccessRelations: jest.fn(),
+    countUsersGroupedByRegra: jest.fn(),
   };
 
   const reportService = {
@@ -279,5 +280,32 @@ describe('AiAdminToolsService', () => {
         }),
       ]),
     );
+  });
+
+  it('builds bar chart for users grouped by regra', async () => {
+    aiAccessService.canMentionUsers.mockResolvedValue(true);
+    usersService.countUsersGroupedByRegra.mockResolvedValue([
+      { regra: 'REGRA_ADMIN', quantidade: 1 },
+      { regra: 'REGRA_DASHBOARD', quantidade: 9 },
+      { regra: 'REGRA_USUARIO', quantidade: 9 },
+    ]);
+
+    const result = await service.analisarUsuariosPorRegra(1, {
+      somenteAtivos: true,
+    });
+
+    expect(result.chartSpec).toMatchObject({
+      type: 'bar',
+      title: 'Usuários por tipo de regra',
+    });
+    expect(result.chartSpec?.data).toEqual([
+      { regra: 'REGRA_ADMIN', quantidade: 1 },
+      { regra: 'REGRA_DASHBOARD', quantidade: 9 },
+      { regra: 'REGRA_USUARIO', quantidade: 9 },
+    ]);
+    expect(result.resumo).toMatchObject({
+      graficoIncluido: true,
+      totalRegras: 3,
+    });
   });
 });

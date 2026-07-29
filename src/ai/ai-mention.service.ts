@@ -255,7 +255,7 @@ export class AiMentionService {
       })
       .join('; ');
 
-    return `[Contexto autorizado do servidor — modo analítico] Alvo da análise: ${targets}. Nenhum número foi pré-calculado: use as ferramentas analíticas para obter os valores. Se faltar definir coluna, métrica ou período, pergunte antes de analisar.`;
+    return `[Contexto autorizado do servidor — modo analítico] Alvo da análise: ${targets}. Nenhum número foi pré-calculado: use as ferramentas analíticas para obter os valores. Para distribuição de usuários por tipo de regra ou gráficos desse domínio, chame graficoUsuariosPorRegra. Se faltar definir coluna, métrica ou período em relatórios, pergunte antes de analisar.`;
   }
 
   /** Metadados (nome, estado, colunas) de um relatório para orientar a análise. */

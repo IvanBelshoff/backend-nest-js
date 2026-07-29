@@ -13,6 +13,8 @@ import { MetricsCollectorService } from 'src/system-metrics/metrics-collector.se
 import { MetricsPersistenceService } from 'src/system-metrics/metrics-persistence.service';
 import { UsersService } from 'src/user/user.service';
 import { AiAccessService } from './ai-access.service';
+import { parseChartSpec } from './ai-chart-spec.schema';
+import type { AiAnalyticsResult } from './ai-analytics.types';
 import { resolvePermitirConhecimentoIa } from 'src/report/report-ai-knowledge.util';
 
 export interface AiAdminUserSummary {
@@ -120,6 +122,56 @@ export class AiAdminToolsService {
     }
     const filter = params.filter?.trim();
     return filter && filter.length > 0 ? filter : undefined;
+  }
+
+  async analisarUsuariosPorRegra(
+    userId: number,
+    params: { somenteAtivos?: boolean } = {},
+  ): Promise<AiAnalyticsResult> {
+    await this.assertCanManageUsers(userId);
+
+    const somenteAtivos = params.somenteAtivos ?? true;
+    const distribuicao = await this.usersService.countUsersGroupedByRegra({
+      somenteAtivos,
+    });
+
+    if (distribuicao.length === 0) {
+      return {
+        resumo: {
+          erro: 'Nenhum usuário com regras cadastradas para o recorte solicitado.',
+        },
+        chartSpec: null,
+      };
+    }
+
+    const chartData = distribuicao.map((row) => ({
+      regra: row.regra,
+      quantidade: row.quantidade,
+    }));
+
+    const chartSpec = parseChartSpec({
+      type: 'bar',
+      title: 'Usuários por tipo de regra',
+      subtitle: somenteAtivos
+        ? 'Somente usuários ativos'
+        : 'Todos os usuários cadastrados',
+      xAxis: { key: 'regra', label: 'Tipo de regra', type: 'category' },
+      yAxis: { label: 'Quantidade de usuários' },
+      series: [{ key: 'quantidade', label: 'Usuários' }],
+      data: chartData,
+      source: 'Domínio Usuários (servidor)',
+    });
+
+    return {
+      resumo: {
+        fonte: 'Domínio Usuários',
+        somenteAtivos,
+        totalRegras: distribuicao.length,
+        distribuicao,
+        graficoIncluido: chartSpec !== null,
+      },
+      chartSpec,
+    };
   }
 
   /**

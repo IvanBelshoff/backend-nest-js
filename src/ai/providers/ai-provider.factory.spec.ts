@@ -22,10 +22,18 @@ jest.mock('@ai-sdk/google', () => ({
   createGoogleGenerativeAI: jest.fn(() => jest.fn(() => 'google-model')),
 }));
 
+jest.mock('./nvidia-chat-template.util', () => {
+  const actual = jest.requireActual('./nvidia-chat-template.util');
+  return {
+    ...actual,
+    createNvidiaExtraBodyFetch: jest.fn(() => jest.fn()),
+  };
+});
+
 const mockEnv = {
   AI_PROVIDER: 'openai-compatible' as const,
   AI_BASE_URL: 'https://integrate.api.nvidia.com/v1',
-  AI_MODEL: 'nvidia/nemotron-3-super-120b-a12b',
+  AI_MODEL: 'nvidia/llama-3.3-nemotron-super-49b-v1.5',
   AI_API_KEY: 'nvapi-test',
   AI_REASONING_ENABLED: true,
   AI_REASONING_EFFORT: 'medium' as const,
@@ -38,16 +46,23 @@ jest.mock('src/shared/env.schema', () => ({
 }));
 
 import { createOpenAI } from '@ai-sdk/openai';
+import { createNvidiaExtraBodyFetch } from './nvidia-chat-template.util';
 import { createAiProviderAdapter } from './ai-provider.factory';
 
 describe('ai-provider.factory', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   it('creates openai-compatible adapter with configured base URL and key', () => {
     const adapter = createAiProviderAdapter();
 
     expect(createOpenAI).toHaveBeenCalledWith({
       apiKey: 'nvapi-test',
       baseURL: 'https://integrate.api.nvidia.com/v1',
+      fetch: expect.any(Function),
     });
+    expect(createNvidiaExtraBodyFetch).toHaveBeenCalledTimes(1);
     expect(adapter.getChatModel()).toBe('openai-model');
   });
 

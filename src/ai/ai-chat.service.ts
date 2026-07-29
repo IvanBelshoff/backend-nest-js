@@ -27,9 +27,11 @@ import { AiThreadTitleService } from './ai-thread-title.service';
 import {
   buildAnalyticsToolSet,
   buildReportToolSet,
+  buildUserDomainAnalyticsToolSet,
 } from './ai-tool-definitions';
 import { extractTextFromUIMessage } from './ai-thread-title.util';
 import type { AiChatMode, AiMentionDto } from './dto/ai-chat.dto';
+import { runWithNvidiaChatTemplateContext } from './providers/nvidia-chat-template.util';
 
 /** Extrai nome/args de tool-call vazada em XML (formato comum no Ollama). */
 function tryParseLeakedFunctionXml(
@@ -457,7 +459,16 @@ export class AiChatService {
         : {}),
       ...(isAdmin ? this.buildAdminTools(userId) : {}),
       ...(mode === 'analitico'
-        ? this.buildAnalyticsTools(userId, emitChart, queueAnalysis)
+        ? {
+            ...this.buildAnalyticsTools(userId, emitChart, queueAnalysis),
+            ...(canManageUsers
+              ? buildUserDomainAnalyticsToolSet({
+                  adminTools: this.aiAdminToolsService,
+                  userId,
+                  emitChart,
+                })
+              : {}),
+          }
         : {}),
     };
 
@@ -516,6 +527,11 @@ export class AiChatService {
     );
 
     const reasoningEnabled = thinking && this.aiService.supportsReasoning();
+    const nvidiaChatTemplateContext = {
+      enableThinking: reasoningEnabled,
+      forceNonemptyContent:
+        !preferMentionFactsOnly && Object.keys(tools).length > 0,
+    };
 
     const runStreamText = () =>
       streamText({
@@ -588,19 +604,20 @@ export class AiChatService {
       });
 
     const stream = createUIMessageStream({
-      execute: ({ writer }) => {
-        chartWriter = writer;
-        const result = runStreamText();
-        const uiStream = toUIMessageStream({ stream: result.stream });
+      execute: ({ writer }) =>
+        runWithNvidiaChatTemplateContext(nvidiaChatTemplateContext, () => {
+          chartWriter = writer;
+          const result = runStreamText();
+          const uiStream = toUIMessageStream({ stream: result.stream });
 
-        writer.merge(
-          createSanitizedUiMessageStream(uiStream, (leakedText) =>
-            this.tryRecoverLeakedToolCall(userId, leakedText).then(
-              (recovered) => recovered ?? sanitizeAssistantText(leakedText),
+          writer.merge(
+            createSanitizedUiMessageStream(uiStream, (leakedText) =>
+              this.tryRecoverLeakedToolCall(userId, leakedText).then(
+                (recovered) => recovered ?? sanitizeAssistantText(leakedText),
+              ),
             ),
-          ),
-        );
-      },
+          );
+        }),
       onError: () =>
         'Não foi possível concluir a resposta. Tente novamente ou inicie uma nova conversa.',
     });

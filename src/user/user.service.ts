@@ -156,6 +156,29 @@ export class UsersService {
     return { data, total };
   }
 
+  async countUsersGroupedByRegra(
+    params: { somenteAtivos?: boolean } = {},
+  ): Promise<Array<{ regra: string; quantidade: number }>> {
+    const query = this.userRepository
+      .createQueryBuilder('usuario')
+      .innerJoin('usuario.regra', 'regra')
+      .select('regra.nome', 'regra')
+      .addSelect('COUNT(DISTINCT usuario.id)', 'quantidade')
+      .groupBy('regra.nome')
+      .orderBy('quantidade', 'DESC');
+
+    if (params.somenteAtivos !== false) {
+      query.andWhere('usuario.bloqueado = :bloqueado', { bloqueado: false });
+    }
+
+    const rows = await query.getRawMany<{ regra: string; quantidade: string }>();
+
+    return rows.map((row) => ({
+      regra: row.regra,
+      quantidade: Number(row.quantidade),
+    }));
+  }
+
   private applyTextFilter(
     query: SelectQueryBuilder<Usuario>,
     filter?: string,

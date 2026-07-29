@@ -1,6 +1,7 @@
 import { tool } from 'ai';
 import { z } from 'zod';
 import type { AiAnalyticsToolsService } from './ai-analytics-tools.service';
+import type { AiAdminToolsService } from './ai-admin-tools.service';
 import {
   ANALYTICS_AGGREGATIONS,
   ANALYTICS_GRANULARITIES,
@@ -183,6 +184,50 @@ export function buildAnalyticsToolSet(params: {
       }),
       execute: async (input) =>
         run(analyticsTools.compararPeriodos(userId, input)),
+    }),
+  };
+}
+
+/**
+ * Tools analíticas do domínio Usuários (não dependem de relatório).
+ * Gráficos seguem o mesmo fluxo `emitChart` das tools de relatório.
+ */
+export function buildUserDomainAnalyticsToolSet(params: {
+  adminTools: AiAdminToolsService;
+  userId: number;
+  emitChart: (spec: AiChartSpec) => void;
+}) {
+  const { adminTools, userId, emitChart } = params;
+
+  const run = async (
+    operation: Promise<{
+      resumo: Record<string, unknown>;
+      chartSpec: AiChartSpec | null;
+    }>,
+  ) => {
+    const { resumo, chartSpec } = await operation;
+
+    if (chartSpec) {
+      emitChart(chartSpec);
+    }
+
+    return resumo;
+  };
+
+  return {
+    graficoUsuariosPorRegra: tool({
+      description:
+        'Gera um gráfico de barras com a distribuição de usuários por tipo de regra (ex.: REGRA_ADMIN, REGRA_DASHBOARD, REGRA_USUARIO). Use quando a pergunta envolver usuários agrupados por regra, perfil de acesso ou composição da base de usuários. O gráfico é renderizado automaticamente na conversa — não descreva o gráfico em texto nem tabelas substitutas.',
+      inputSchema: z.object({
+        somenteAtivos: z
+          .boolean()
+          .optional()
+          .describe(
+            'Se true (padrão), considera apenas usuários não bloqueados.',
+          ),
+      }),
+      execute: async (input) =>
+        run(adminTools.analisarUsuariosPorRegra(userId, input)),
     }),
   };
 }

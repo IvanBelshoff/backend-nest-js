@@ -19,6 +19,7 @@ import {
   buildAnalyticsToolSet,
   buildReportToolSet,
 } from './ai-tool-definitions';
+import { runWithNvidiaChatTemplateContext } from './providers/nvidia-chat-template.util';
 
 /** Estado de uma análise em fila, gravado em `AiChatMessage.metadata.analysis`. */
 export type AiAnalysisStatus = 'processing' | 'done' | 'failed';
@@ -218,26 +219,33 @@ export class AiAnalysisService {
     );
 
     const reasoningEnabled = this.aiService.supportsReasoning();
-    const result = await generateText({
-      model: this.aiService.getChatModel({ thinking: reasoningEnabled }),
-      system: `${systemPrompt}\n\n${this.buildQueuedAnalysisInstructions()}`,
-      prompt: this.buildAnalysisPrompt(payload),
-      tools: {
-        ...buildReportToolSet({
-          reportTools: this.aiReportToolsService,
-          userId: payload.userId,
-        }),
-        ...buildAnalyticsToolSet({
-          analyticsTools: this.aiAnalyticsToolsService,
-          userId: payload.userId,
-          emitChart,
-        }),
+    const result = await runWithNvidiaChatTemplateContext(
+      {
+        enableThinking: reasoningEnabled,
+        forceNonemptyContent: true,
       },
-      providerOptions: reasoningEnabled
-        ? this.aiService.getReasoningProviderOptions()
-        : undefined,
-      stopWhen: stepCountIs(env.AI_ANALYSIS_MAX_STEPS),
-    });
+      () =>
+        generateText({
+          model: this.aiService.getChatModel({ thinking: reasoningEnabled }),
+          system: `${systemPrompt}\n\n${this.buildQueuedAnalysisInstructions()}`,
+          prompt: this.buildAnalysisPrompt(payload),
+          tools: {
+            ...buildReportToolSet({
+              reportTools: this.aiReportToolsService,
+              userId: payload.userId,
+            }),
+            ...buildAnalyticsToolSet({
+              analyticsTools: this.aiAnalyticsToolsService,
+              userId: payload.userId,
+              emitChart,
+            }),
+          },
+          providerOptions: reasoningEnabled
+            ? this.aiService.getReasoningProviderOptions()
+            : undefined,
+          stopWhen: stepCountIs(env.AI_ANALYSIS_MAX_STEPS),
+        }),
+    );
 
     const text = result.text.trim();
 

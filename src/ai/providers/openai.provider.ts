@@ -15,14 +15,22 @@ import {
   reasoningEffort,
   withThinkTagExtraction,
 } from './ai-provider.reasoning.util';
+import {
+  createNvidiaExtraBodyFetch,
+  isNvidiaNimBaseUrl,
+} from './nvidia-chat-template.util';
 
 function createOpenAiProvider(
   config: AiProviderConfig,
   provider: Extract<AiProviderId, 'openai' | 'openai-compatible'>,
 ): AiProviderAdapter {
+  const usesNvidiaChatTemplate = isNvidiaNimBaseUrl(config.baseUrl);
   const openAi = createOpenAI({
     apiKey: config.apiKey,
     ...(config.baseUrl ? { baseURL: config.baseUrl } : {}),
+    ...(usesNvidiaChatTemplate
+      ? { fetch: createNvidiaExtraBodyFetch() }
+      : {}),
   });
 
   return {
@@ -31,9 +39,8 @@ function createOpenAiProvider(
     },
 
     getReasoningProviderOptions() {
-      // `reasoningEffort` é uma opção da API oficial da OpenAI; servidores
-      // openai-compatible costumam rejeitá-la, então só enviamos no provedor
-      // oficial e deixamos a extração de <think> cuidar do resto.
+      // `reasoningEffort` é uma opção da API oficial da OpenAI. NVIDIA NIM usa
+      // `chat_template_kwargs` (injetado via fetch customizado), não este campo.
       if (provider !== 'openai') {
         return undefined;
       }
