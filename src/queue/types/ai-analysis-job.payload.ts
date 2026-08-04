@@ -7,4 +7,7 @@ export interface AiAnalysisJobPayload {
   relatorioIds: number[];
   /** Contexto extra da conversa (período, métrica, recorte) que o modelo julgou relevante. */
   contexto?: string;
+  /** Plano aprovado (quando a análise veio do fluxo de planos). */
+  planId?: string;
+  planSnapshot?: Record<string, unknown>;
 }

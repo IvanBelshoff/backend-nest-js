@@ -15,6 +15,7 @@ import {
   type FilterSpec,
   type SortSpec,
 } from './duckdb-query.util';
+import { prepareAdhocSnapshotSql } from './duckdb-adhoc-sql.util';
 
 export interface QueryPageOptions {
   colunas: string[];
@@ -227,6 +228,51 @@ export class DuckDbService implements OnModuleInit, OnModuleDestroy {
       return reader
         .getRowObjectsJS()
         .map((row) => normalizeRow(row as Record<string, unknown>));
+    });
+  }
+
+  /**
+   * SQL ad-hoc da IA sobre um Parquet autorizado. A fonte é exposta apenas como
+   * view temporária `dados`; o SQL do modelo não pode abrir outros arquivos.
+   */
+  async queryAdhoc(
+    parquetPath: string,
+    sql: string,
+    maxRows: number,
+  ): Promise<{
+    colunas: string[];
+    dados: Record<string, unknown>[];
+    total_linhas: number;
+    truncado: boolean;
+  }> {
+    const safeSql = prepareAdhocSnapshotSql(sql, maxRows);
+    const src = sqlPathLiteral(parquetPath);
+
+    return this.withConnection(async (conn) => {
+      await conn.run(
+        `CREATE OR REPLACE TEMP VIEW dados AS SELECT * FROM read_parquet(${src})`,
+      );
+
+      try {
+        const reader = await conn.runAndReadAll(safeSql);
+        const dados = reader
+          .getRowObjectsJS()
+          .map((row) => normalizeRow(row as Record<string, unknown>));
+        const colunas = dados.length > 0 ? Object.keys(dados[0]) : [];
+
+        return {
+          colunas,
+          dados,
+          total_linhas: dados.length,
+          truncado: dados.length >= maxRows,
+        };
+      } finally {
+        try {
+          await conn.run('DROP VIEW IF EXISTS dados');
+        } catch {
+          /* ignore */
+        }
+      }
     });
   }
 

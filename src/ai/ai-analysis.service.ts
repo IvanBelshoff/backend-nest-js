@@ -1,5 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  forwardRef,
+  Inject,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { generateText, stepCountIs } from 'ai';
 import { Repository } from 'typeorm';
@@ -12,11 +17,22 @@ import { UserNotificationService } from 'src/user-notifications/user-notificatio
 import { AiAccessService } from './ai-access.service';
 import { AiAnalyticsToolsService } from './ai-analytics-tools.service';
 import type { AiChartSpec } from './ai-chart-spec.schema';
+import type { AiTableSpec } from './ai-table-spec.schema';
 import { AiChatPersistenceService } from './ai-chat-persistence.service';
+import { AiExplorationToolsService } from './ai-exploration-tools.service';
 import { AiReportToolsService } from './ai-report-tools.service';
 import { AiService } from './ai.service';
+import { AiPlanService } from './plan/ai-plan.service';
+import {
+  aiPlanSchema,
+  buildPlanExecutionPrompt,
+  buildVisualizationExecutionInstructions,
+  planRequiresVisualization,
+  type AiPlan,
+} from './plan/ai-plan.schema';
 import {
   buildAnalyticsToolSet,
+  buildExplorationToolSet,
   buildReportToolSet,
 } from './ai-tool-definitions';
 import { runWithNvidiaChatTemplateContext } from './providers/nvidia-chat-template.util';
@@ -52,6 +68,9 @@ export class AiAnalysisService {
     private readonly aiChatPersistenceService: AiChatPersistenceService,
     private readonly aiReportToolsService: AiReportToolsService,
     private readonly aiAnalyticsToolsService: AiAnalyticsToolsService,
+    private readonly aiExplorationToolsService: AiExplorationToolsService,
+    @Inject(forwardRef(() => AiPlanService))
+    private readonly aiPlanService: AiPlanService,
     private readonly userNotificationService: UserNotificationService,
   ) {}
 
@@ -70,6 +89,8 @@ export class AiAnalysisService {
     pergunta: string;
     relatorioIds: number[];
     contexto?: string;
+    planId?: string;
+    planSnapshot?: unknown;
   }): Promise<EnqueueAnalysisResult> {
     if (!this.isQueueEnabled) {
       return { erro: QUEUE_DISABLED_MESSAGE };
@@ -99,6 +120,11 @@ export class AiAnalysisService {
       pergunta: params.pergunta,
       relatorioIds,
       contexto: params.contexto,
+      planId: params.planId,
+      planSnapshot:
+        params.planSnapshot && typeof params.planSnapshot === 'object'
+          ? (params.planSnapshot as Record<string, unknown>)
+          : undefined,
     };
 
     try {
@@ -147,7 +173,7 @@ export class AiAnalysisService {
     }
 
     try {
-      const { text, charts } = await this.generateAnalysis(payload);
+      const { text, charts, tables } = await this.generateAnalysis(payload);
 
       await this.aiChatPersistenceService.saveAssistantMessage(
         payload.threadId,
@@ -160,10 +186,21 @@ export class AiAnalysisService {
               id,
               data: spec,
             })),
+            ...tables.map(({ id, spec }) => ({
+              type: 'data-table' as const,
+              id,
+              data: spec,
+            })),
             { type: 'text' as const, text },
           ],
         },
         { analysis: { status: 'done', jobId, pergunta: payload.pergunta } },
+      );
+
+      await this.aiPlanService.markPlanOutcome(
+        payload.threadId,
+        payload.planId,
+        'done',
       );
 
       await this.userNotificationService.createFromAiAnalysis({
@@ -177,6 +214,12 @@ export class AiAnalysisService {
         error instanceof Error ? error.message : 'erro desconhecido';
       this.logger.error(`Falha na análise em fila ${jobId}: ${reason}`);
 
+      await this.aiPlanService.markPlanOutcome(
+        payload.threadId,
+        payload.planId,
+        'failed',
+        reason,
+      );
       await this.saveFailure(jobId, payload, reason);
       throw error;
     }
@@ -185,6 +228,7 @@ export class AiAnalysisService {
   private async generateAnalysis(payload: AiAnalysisJobPayload): Promise<{
     text: string;
     charts: Array<{ id: string; spec: AiChartSpec }>;
+    tables: Array<{ id: string; spec: AiTableSpec }>;
   }> {
     const user = await this.userRepository.findOne({
       where: { id: payload.userId },
@@ -205,9 +249,18 @@ export class AiAnalysisService {
     }
 
     const charts: Array<{ id: string; spec: AiChartSpec }> = [];
+    const tables: Array<{ id: string; spec: AiTableSpec }> = [];
     const emitChart = (spec: AiChartSpec) => {
       charts.push({ id: randomUUID(), spec });
     };
+    const emitTable = (spec: AiTableSpec) => {
+      tables.push({ id: randomUUID(), spec });
+    };
+
+    const planParsed = payload.planSnapshot
+      ? aiPlanSchema.safeParse(payload.planSnapshot)
+      : null;
+    const plan = planParsed?.success ? planParsed.data : null;
 
     const reportCatalog =
       await this.aiReportToolsService.getReportCatalogForPrompt(payload.userId);
@@ -227,7 +280,7 @@ export class AiAnalysisService {
       () =>
         generateText({
           model: this.aiService.getChatModel({ thinking: reasoningEnabled }),
-          system: `${systemPrompt}\n\n${this.buildQueuedAnalysisInstructions()}`,
+          system: `${systemPrompt}\n\n${this.buildQueuedAnalysisInstructions(plan)}`,
           prompt: this.buildAnalysisPrompt(payload),
           tools: {
             ...buildReportToolSet({
@@ -239,6 +292,12 @@ export class AiAnalysisService {
               userId: payload.userId,
               emitChart,
             }),
+            ...buildExplorationToolSet({
+              explorationTools: this.aiExplorationToolsService,
+              userId: payload.userId,
+              emitChart,
+              emitTable,
+            }),
           },
           providerOptions: reasoningEnabled
             ? this.aiService.getReasoningProviderOptions()
@@ -249,25 +308,48 @@ export class AiAnalysisService {
 
     const text = result.text.trim();
 
-    if (!text && charts.length === 0) {
+    if (!text && charts.length === 0 && tables.length === 0) {
       throw new Error('A análise não produziu resultado.');
     }
 
     return {
-      text: text || 'A análise gerou os gráficos abaixo.',
+      text:
+        text ||
+        (charts.length > 0
+          ? 'A análise gerou os gráficos abaixo.'
+          : 'A análise gerou as tabelas abaixo.'),
       charts,
+      tables,
     };
   }
 
-  private buildQueuedAnalysisInstructions(): string {
-    return [
+  private buildQueuedAnalysisInstructions(plan: AiPlan | null): string {
+    const lines = [
       'Esta é uma análise em segundo plano: não há usuário aguardando no chat.',
       'Não cumprimente, não faça perguntas de esclarecimento e não prometa análises futuras — entregue o resultado final agora.',
+      'Siga o plano aprovado. Se uma ferramenta falhar (coluna inexistente, snapshot ausente, SQL inválido), corrija os parâmetros e tente de novo até concluir ou esgotar as tentativas.',
+      'Use executarQuerySnapshot para exploração inicial. Use garantirSnapshot se o Parquet estiver ausente.',
+      'Para visualizações: use visualizarDados (gráfico) ou publicarTabela (tabela interativa). Atalhos analíticos (analisarTendencia, calcularCorrelacao, etc.) também geram gráficos automaticamente.',
+      'PROIBIDO reproduzir tabelas markdown com dados numéricos já consultados — use publicarTabela.',
       'Se faltar dado para responder, diga exatamente o que faltou e qual seria o próximo passo.',
-    ].join('\n');
+    ];
+
+    if (plan && planRequiresVisualization(plan)) {
+      lines.push(buildVisualizationExecutionInstructions());
+    }
+
+    return lines.join('\n');
   }
 
   private buildAnalysisPrompt(payload: AiAnalysisJobPayload): string {
+    const planParsed = payload.planSnapshot
+      ? aiPlanSchema.safeParse(payload.planSnapshot)
+      : null;
+
+    if (planParsed?.success) {
+      return buildPlanExecutionPrompt(planParsed.data);
+    }
+
     const lines = [
       `Pergunta analítica: ${payload.pergunta}`,
       `Relatórios autorizados para esta análise (referência interna): ${payload.relatorioIds.join(', ')}`,

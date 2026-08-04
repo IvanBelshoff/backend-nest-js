@@ -128,7 +128,10 @@ export const envSchema = z.object({
   AI_MAX_REPORT_ROWS: z.coerce.number().int().positive().default(100),
   AI_MAX_STEPS: z.coerce.number().int().positive().default(5),
   // A análise em fila não trava conexão HTTP, então pode dar mais passos.
-  AI_ANALYSIS_MAX_STEPS: z.coerce.number().int().positive().default(10),
+  AI_ANALYSIS_MAX_STEPS: z.coerce.number().int().positive().default(25),
+  AI_SNAPSHOT_QUERY_MAX_ROWS: z.coerce.number().int().positive().default(200),
+  AI_DB_QUERY_MAX_ROWS: z.coerce.number().int().positive().default(100),
+  AI_DB_QUERY_TIMEOUT_MS: z.coerce.number().int().positive().default(15000),
 }).and(aiEnvSchema);
 
 export type Env = z.infer<typeof envSchema>;

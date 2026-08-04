@@ -30,6 +30,9 @@ export const AUDIT_ACTIONS = {
   REPORT_ACL_IA_KNOWLEDGE_UPDATE: 'report.acl.ia_knowledge.update',
   REPORT_EXECUTE: 'report.execute',
 
+  AI_QUERY_SNAPSHOT: 'ai.query.snapshot',
+  AI_QUERY_CONNECTION: 'ai.query.connection',
+
   SCHEDULER_CREATE: 'scheduler.create',
   SCHEDULER_UPDATE: 'scheduler.update',
   SCHEDULER_DELETE: 'scheduler.delete',

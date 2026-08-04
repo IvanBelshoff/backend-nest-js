@@ -11,6 +11,6 @@ import { SchemaIntrospectionService } from './schema/schema-introspection.servic
   imports: [TypeOrmModule.forFeature([Conexao]), AuditModule],
   controllers: [ConnectionController],
   providers: [ConnectionService, ConnectionQueryService, SchemaIntrospectionService],
-  exports: [ConnectionService],
+  exports: [ConnectionService, ConnectionQueryService],
 })
 export class ConnectionModule {}

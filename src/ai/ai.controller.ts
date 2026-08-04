@@ -5,6 +5,7 @@ import {
   Get,
   HttpCode,
   Param,
+  Patch,
   Post,
   Request,
   Res,
@@ -22,6 +23,11 @@ import { AiChatService } from './ai-chat.service';
 import { AiChatPersistenceService } from './ai-chat-persistence.service';
 import { AiMentionService } from './ai-mention.service';
 import { AiService } from './ai.service';
+import { AiPlanService } from './plan/ai-plan.service';
+import {
+  updateAiPlanSchema,
+  type UpdateAiPlanDto,
+} from './plan/ai-plan.schema';
 import {
   aiChatSchema,
   createAiThreadSchema,
@@ -37,6 +43,7 @@ export class AiController {
     private readonly aiChatService: AiChatService,
     private readonly aiChatPersistenceService: AiChatPersistenceService,
     private readonly aiMentionService: AiMentionService,
+    private readonly aiPlanService: AiPlanService,
   ) {}
 
   @Get('health')
@@ -145,6 +152,63 @@ export class AiController {
     await this.aiChatPersistenceService.deleteThread(
       Number(req.user.sub),
       threadId,
+    );
+  }
+
+  @Patch('threads/:threadId/plans/:planId')
+  @UseGuards(AiAccessGuard)
+  @ZodValidation(updateAiPlanSchema)
+  async updatePlan(
+    @Param('threadId') threadId: string,
+    @Param('planId') planId: string,
+    @Body() dto: UpdateAiPlanDto,
+    @Request() req: UserRequest,
+  ) {
+    if (!req.user) {
+      throw new UnauthorizedException();
+    }
+
+    return this.aiPlanService.updatePlan(
+      Number(req.user.sub),
+      threadId,
+      planId,
+      dto,
+    );
+  }
+
+  @Post('threads/:threadId/plans/:planId/approve')
+  @UseGuards(AiAccessGuard)
+  async approvePlan(
+    @Param('threadId') threadId: string,
+    @Param('planId') planId: string,
+    @Request() req: UserRequest,
+  ) {
+    if (!req.user) {
+      throw new UnauthorizedException();
+    }
+
+    return this.aiPlanService.approvePlan(
+      Number(req.user.sub),
+      threadId,
+      planId,
+    );
+  }
+
+  @Post('threads/:threadId/plans/:planId/cancel')
+  @UseGuards(AiAccessGuard)
+  async cancelPlan(
+    @Param('threadId') threadId: string,
+    @Param('planId') planId: string,
+    @Request() req: UserRequest,
+  ) {
+    if (!req.user) {
+      throw new UnauthorizedException();
+    }
+
+    return this.aiPlanService.cancelPlan(
+      Number(req.user.sub),
+      threadId,
+      planId,
     );
   }
 

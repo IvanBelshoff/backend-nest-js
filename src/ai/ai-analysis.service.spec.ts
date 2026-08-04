@@ -49,6 +49,8 @@ describe('AiAnalysisService', () => {
       getReportCatalogForPrompt: jest.fn(() => Promise.resolve([])),
     };
     const aiAnalyticsToolsService = {};
+    const aiExplorationToolsService = {};
+    const aiPlanService = { markPlanOutcome: jest.fn() };
     const userNotificationService = { createFromAiAnalysis: jest.fn() };
 
     const service = new AiAnalysisService(
@@ -59,6 +61,8 @@ describe('AiAnalysisService', () => {
       aiChatPersistenceService as never,
       aiReportToolsService as never,
       aiAnalyticsToolsService as never,
+      aiExplorationToolsService as never,
+      aiPlanService as never,
       userNotificationService as never,
     );
 

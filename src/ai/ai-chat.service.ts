@@ -17,18 +17,19 @@ import type { Usuario } from 'src/database/entities/Usuarios';
 import { AiService } from './ai.service';
 import { AiAccessService } from './ai-access.service';
 import { AiAdminToolsService } from './ai-admin-tools.service';
-import { AiAnalysisService } from './ai-analysis.service';
-import { AiAnalyticsToolsService } from './ai-analytics-tools.service';
 import type { AiChartSpec } from './ai-chart-spec.schema';
 import { AiChatPersistenceService } from './ai-chat-persistence.service';
 import { AiMentionService } from './ai-mention.service';
 import { AiReportToolsService } from './ai-report-tools.service';
 import { AiThreadTitleService } from './ai-thread-title.service';
 import {
-  buildAnalyticsToolSet,
+  buildPlanningReportToolSet,
+  buildPlanProposalTool,
   buildReportToolSet,
   buildUserDomainAnalyticsToolSet,
 } from './ai-tool-definitions';
+import { AiPlanService } from './plan/ai-plan.service';
+import type { AiPlan } from './plan/ai-plan.schema';
 import { extractTextFromUIMessage } from './ai-thread-title.util';
 import type { AiChatMode, AiMentionDto } from './dto/ai-chat.dto';
 import { runWithNvidiaChatTemplateContext } from './providers/nvidia-chat-template.util';
@@ -64,7 +65,7 @@ function looksLikeLeakedToolCallJson(text: string): boolean {
     return false;
   }
 
-  if (/<tool_call>|<\/?function=/i.test(trimmed)) {
+  if (/<\/?tool_call>|<\/?function=/i.test(trimmed)) {
     return true;
   }
 
@@ -101,11 +102,22 @@ function looksLikeLeakedToolCallJson(text: string): boolean {
   return false;
 }
 
+function stripToolCallMarkup(text: string): string {
+  return text
+    .replace(/<\/?tool_call>/gi, '')
+    .replace(/<\/?function=[^>\s]+>/gi, '')
+    .trim();
+}
+
 function sanitizeAssistantText(text: string): string {
+  const stripped = stripToolCallMarkup(text);
+  if (!stripped) {
+    return '';
+  }
   if (looksLikeLeakedToolCallJson(text)) {
     return 'Não consegui formatar a resposta. Tente perguntar de novo ou use Nova conversa.';
   }
-  return redactInternalLeakageInText(redactToolNamesInText(text));
+  return redactInternalLeakageInText(redactToolNamesInText(stripped));
 }
 
 const KNOWN_TOOL_NAMES = [
@@ -229,6 +241,14 @@ function createSanitizedUiMessageStream<T extends Record<string, unknown>>(
             const starts = heldStarts.get(messageId) ?? [];
             heldStarts.delete(messageId);
 
+            const strippedOnly = stripToolCallMarkup(accumulated);
+            if (!strippedOnly) {
+              for (const start of starts) {
+                controller.enqueue(start);
+              }
+              return;
+            }
+
             let safeText: string;
             try {
               safeText = await onLeakedText(accumulated);
@@ -256,22 +276,22 @@ function createSanitizedUiMessageStream<T extends Record<string, unknown>>(
           const starts = heldStarts.get(messageId) ?? [];
           heldStarts.delete(messageId);
 
+          const strippedMarkup = stripToolCallMarkup(accumulated);
+          const isLeaked = looksLikeLeakedToolCallJson(accumulated);
+
+          if (!strippedMarkup || isLeaked) {
+            for (const start of starts) {
+              controller.enqueue(start);
+            }
+            controller.enqueue(chunk);
+            return;
+          }
+
           let safeText = sanitizeAssistantText(
             redactInternalLeakageInText(redactToolNamesInText(accumulated), {
               collapseWhitespace: true,
             }),
           );
-
-          if (looksLikeLeakedToolCallJson(accumulated)) {
-            try {
-              const recovered = await onLeakedText(accumulated);
-              if (recovered.trim()) {
-                safeText = recovered;
-              }
-            } catch {
-              // mantém mensagem sanitizada
-            }
-          }
 
           for (const start of starts) {
             controller.enqueue(start);
@@ -307,11 +327,17 @@ function createSanitizedUiMessageStream<T extends Record<string, unknown>>(
         }
 
         if (typeof record.delta === 'string') {
-          controller.enqueue({
-            ...chunk,
-            delta: redactInternalLeakageInText(redactToolNamesInText(record.delta), {
+          const cleaned = stripToolCallMarkup(
+            redactInternalLeakageInText(redactToolNamesInText(record.delta), {
               collapseWhitespace: false,
             }),
+          );
+          if (!cleaned) {
+            return;
+          }
+          controller.enqueue({
+            ...chunk,
+            delta: cleaned,
           } as T);
           return;
         }
@@ -330,8 +356,7 @@ export class AiChatService {
     private readonly aiChatPersistenceService: AiChatPersistenceService,
     private readonly aiReportToolsService: AiReportToolsService,
     private readonly aiAdminToolsService: AiAdminToolsService,
-    private readonly aiAnalyticsToolsService: AiAnalyticsToolsService,
-    private readonly aiAnalysisService: AiAnalysisService,
+    private readonly aiPlanService: AiPlanService,
     private readonly aiThreadTitleService: AiThreadTitleService,
     private readonly aiMentionService: AiMentionService,
   ) {}
@@ -419,9 +444,10 @@ export class AiChatService {
       mentionUserPrefix,
     );
 
-    // Gráficos são escritos no stream assim que a tool termina e guardados para
-    // persistir junto da mensagem, para reaparecerem ao reabrir a conversa.
+    // Gráficos / plano: escritos no stream assim que a tool termina e persistidos
+    // nas parts da mensagem (mesmo padrão data-chart), para o card aparecer ao vivo.
     const emittedCharts: Array<{ id: string; spec: AiChartSpec }> = [];
+    const emittedPlans: AiPlan[] = [];
     let chartWriter: UIMessageStreamWriter | null = null;
 
     const emitChart = (spec: AiChartSpec) => {
@@ -430,37 +456,45 @@ export class AiChatService {
       chartWriter?.write({ type: 'data-chart', id, data: spec });
     };
 
-    // Análise pesada enfileirada: a mensagem que está sendo escrita fica marcada
-    // como "processando" e o worker acrescenta o resultado depois.
-    let queuedAnalysis: { jobId: string; pergunta: string } | null = null;
-
-    const queueAnalysis = async (input: {
-      pergunta: string;
-      relatorioIds: number[];
-      contexto?: string;
-    }) => {
-      const result = await this.aiAnalysisService.enqueue({
-        userId,
-        threadId: thread.id,
-        ...input,
+    const emitPlan = (plan: AiPlan) => {
+      emittedPlans.push(plan);
+      chartWriter?.write({
+        type: 'data-plan',
+        id: plan.id,
+        data: plan,
       });
-
-      if ('jobId' in result) {
-        queuedAnalysis = { jobId: result.jobId, pergunta: input.pergunta };
-      }
-
-      return result;
     };
 
+    // Plano proposto na fase analítica — também gravado em metadata.
+    let proposedPlan: AiPlan | null = null;
+
     const tools = {
-      ...this.buildReportTools(userId),
-      ...(canManageUsers && !isAdmin
-        ? this.buildUserManagementTools(userId)
-        : {}),
-      ...(isAdmin ? this.buildAdminTools(userId) : {}),
       ...(mode === 'analitico'
         ? {
-            ...this.buildAnalyticsTools(userId, emitChart, queueAnalysis),
+            ...buildPlanningReportToolSet({
+              reportTools: this.aiReportToolsService,
+              userId,
+            }),
+            ...buildPlanProposalTool({
+              getExistingPlan: () => proposedPlan,
+              onPropose: (proposal) => {
+                if (proposedPlan) {
+                  return proposedPlan;
+                }
+                proposedPlan = this.aiPlanService.createPlanFromProposal(proposal);
+                emitPlan(proposedPlan);
+                return proposedPlan;
+              },
+              afterPropose: async (plan) => {
+                if (await this.aiPlanService.hasPersistedPlan(thread.id, plan.id)) {
+                  return;
+                }
+                await this.aiPlanService.persistProposedPlanMessage(
+                  thread.id,
+                  plan,
+                );
+              },
+            }),
             ...(canManageUsers
               ? buildUserDomainAnalyticsToolSet({
                   adminTools: this.aiAdminToolsService,
@@ -469,7 +503,13 @@ export class AiChatService {
                 })
               : {}),
           }
-        : {}),
+        : {
+            ...this.buildReportTools(userId),
+            ...(canManageUsers && !isAdmin
+              ? this.buildUserManagementTools(userId)
+              : {}),
+            ...(isAdmin ? this.buildAdminTools(userId) : {}),
+          }),
     };
 
     const responseHeaders: Record<string, string> = {
@@ -544,7 +584,12 @@ export class AiChatService {
           : undefined,
         // Modelos pequenos (Ollama) frequentemente escrevem tool-calls como texto JSON
         // ou alucinam contagens (ex.: limit=50). Com metadados já no prompt, desliga tools.
-        ...(preferMentionFactsOnly ? { toolChoice: 'none' as const } : {}),
+        ...(preferMentionFactsOnly
+          ? { toolChoice: 'none' as const }
+          : mode === 'analitico'
+            ? // Força tool na 1ª etapa; depois o modelo pode responder em texto.
+              { toolChoice: 'auto' as const }
+            : {}),
         stopWhen: stepCountIs(env.AI_MAX_STEPS),
         onFinish: async ({ text }) => {
           const shouldRefineTitle =
@@ -554,8 +599,18 @@ export class AiChatService {
             id,
             data: spec,
           }));
+          const planParts = emittedPlans.map((plan) => ({
+            type: 'data-plan' as const,
+            id: plan.id,
+            data: plan,
+          }));
 
-          if (!text?.trim() && chartParts.length === 0 && !queuedAnalysis) {
+          if (
+            !text?.trim() &&
+            chartParts.length === 0 &&
+            planParts.length === 0 &&
+            !proposedPlan
+          ) {
             if (shouldRefineTitle && firstUserText) {
               void this.refineThreadTitle(thread.id, firstUserText);
             }
@@ -563,11 +618,11 @@ export class AiChatService {
           }
 
           let safeText = text ?? '';
-          if (!safeText.trim() && queuedAnalysis) {
+          if (proposedPlan || planParts.length > 0) {
+            // Evita duplicar o plano em markdown quando a tool já criou o card.
             safeText =
-              'Coloquei essa análise na fila. Você pode continuar navegando: aviso aqui e por notificação quando o resultado estiver pronto.';
-          }
-          if (looksLikeLeakedToolCallJson(safeText)) {
+              'Preparei um plano de análise. Responda as perguntas no card abaixo, ajuste os passos se quiser e aprove para eu executar.';
+          } else if (looksLikeLeakedToolCallJson(safeText)) {
             const recovered = await this.tryRecoverLeakedToolCall(
               userId,
               safeText,
@@ -577,6 +632,34 @@ export class AiChatService {
             safeText = sanitizeAssistantText(safeText);
           }
 
+          if (!safeText.trim() && (chartParts.length > 0 || planParts.length > 0 || proposedPlan)) {
+            safeText =
+              proposedPlan || planParts.length > 0
+                ? 'Preparei um plano de análise. Responda as perguntas no card abaixo, ajuste os passos se quiser e aprove para eu executar.'
+                : '';
+          }
+
+          const metadata: Record<string, unknown> = {};
+          if (proposedPlan) {
+            metadata.plan = { ...proposedPlan };
+          } else if (emittedPlans[0]) {
+            metadata.plan = { ...emittedPlans[0] };
+          }
+
+          // Plano já foi persistido na tool; evita mensagem duplicada.
+          if (proposedPlan) {
+            const alreadySaved = await this.aiPlanService.hasPersistedPlan(
+              thread.id,
+              proposedPlan.id,
+            );
+            if (alreadySaved) {
+              if (shouldRefineTitle && firstUserText) {
+                void this.refineThreadTitle(thread.id, firstUserText);
+              }
+              return;
+            }
+          }
+
           await this.aiChatPersistenceService.saveAssistantMessage(
             thread.id,
             {
@@ -584,17 +667,13 @@ export class AiChatService {
               role: 'assistant',
               parts: [
                 ...chartParts,
+                ...planParts,
                 ...(safeText.trim()
                   ? [{ type: 'text' as const, text: safeText }]
                   : []),
               ],
             },
-            queuedAnalysis
-              ? this.aiAnalysisService.buildProcessingMetadata(
-                  queuedAnalysis.jobId,
-                  queuedAnalysis.pergunta,
-                )
-              : {},
+            metadata,
           );
 
           if (shouldRefineTitle && firstUserText) {
@@ -722,48 +801,6 @@ export class AiChatService {
       reportTools: this.aiReportToolsService,
       userId,
     });
-  }
-
-  private buildAnalyticsTools(
-    userId: number,
-    emitChart: (spec: AiChartSpec) => void,
-    queueAnalysis: (input: {
-      pergunta: string;
-      relatorioIds: number[];
-      contexto?: string;
-    }) => Promise<unknown>,
-  ) {
-    return {
-      ...buildAnalyticsToolSet({
-        analyticsTools: this.aiAnalyticsToolsService,
-        userId,
-        emitChart,
-      }),
-      agendarAnaliseProfunda: tool({
-        description:
-          'Envia uma análise pesada para processamento em segundo plano (fila) em vez de responder agora. Use quando a análise exigir vários relatórios, várias métricas combinadas, histórico longo ou muitas etapas — casos em que responder na hora deixaria o usuário esperando. O resultado (texto + gráficos) aparece nesta mesma conversa e o usuário é notificado ao concluir, podendo navegar para outra parte do sistema. Não use para uma única estatística simples: nesse caso rode a ferramenta analítica direto.',
-        inputSchema: z.object({
-          pergunta: z
-            .string()
-            .min(10)
-            .describe(
-              'Pergunta analítica completa e autocontida (sem depender do histórico da conversa), incluindo métrica, recorte e período.',
-            ),
-          relatorioIds: z
-            .array(z.number().int().positive())
-            .min(1)
-            .max(5)
-            .describe('Relatórios autorizados que a análise deve usar.'),
-          contexto: z
-            .string()
-            .optional()
-            .describe(
-              'Detalhes adicionais da conversa que ajudam a análise (colunas confirmadas, filtros, período combinado).',
-            ),
-        }),
-        execute: async (input) => queueAnalysis(input),
-      }),
-    };
   }
 
   private buildUserManagementTools(userId: number) {

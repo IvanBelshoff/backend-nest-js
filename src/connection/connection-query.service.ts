@@ -57,6 +57,49 @@ export class ConnectionQueryService {
       env.REPORT_QUERY_MAX_ROWS,
     );
 
+    return this.runPreview(connectionId, dto, requester, {
+      maxRows,
+      timeoutMs: env.QUERY_PREVIEW_TIMEOUT_MS,
+      auditAction: AUDIT_ACTIONS.CONNECTION_QUERY_PREVIEW,
+    });
+  }
+
+  /**
+   * Preview com limites e auditoria específicos da IA (mais rígidos que o editor).
+   */
+  async previewForAi(
+    connectionId: number,
+    dto: ConnectionQueryPreviewDto,
+    requester: Requester,
+    options: {
+      maxRows: number;
+      timeoutMs: number;
+      relatorioId: number;
+    },
+  ): Promise<ConnectionQueryPreviewResult> {
+    assertReadOnlyQuery(dto.query);
+
+    const maxRows = Math.min(dto.limite ?? options.maxRows, options.maxRows);
+
+    return this.runPreview(connectionId, dto, requester, {
+      maxRows,
+      timeoutMs: options.timeoutMs,
+      auditAction: AUDIT_ACTIONS.AI_QUERY_CONNECTION,
+      relatorioId: options.relatorioId,
+    });
+  }
+
+  private async runPreview(
+    connectionId: number,
+    dto: ConnectionQueryPreviewDto,
+    requester: Requester,
+    options: {
+      maxRows: number;
+      timeoutMs: number;
+      auditAction: (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];
+      relatorioId?: number;
+    },
+  ): Promise<ConnectionQueryPreviewResult> {
     const resolvedParams = this.resolveParams(dto);
     const { conexao, senha } = await this.getCredentials(connectionId);
 
@@ -66,16 +109,16 @@ export class ConnectionQueryService {
       senha,
       dto.query,
       resolvedParams,
-      maxRows,
-      env.QUERY_PREVIEW_TIMEOUT_MS,
+      options.maxRows,
+      options.timeoutMs,
     );
     const tempoMs = Date.now() - startedAt;
 
-    const truncado = result.total_linhas >= maxRows;
+    const truncado = result.total_linhas >= options.maxRows;
 
     this.auditService.record({
       actor: toAuditActor(requester),
-      action: AUDIT_ACTIONS.CONNECTION_QUERY_PREVIEW,
+      action: options.auditAction,
       category: 'connection',
       outcome: 'success',
       resource: { type: 'conexao', id: String(connectionId) },
@@ -83,6 +126,9 @@ export class ConnectionQueryService {
         truncado,
         total_linhas: result.total_linhas,
         tempo_ms: tempoMs,
+        ...(options.relatorioId != null
+          ? { relatorio_id: options.relatorioId }
+          : {}),
       }),
     });
 

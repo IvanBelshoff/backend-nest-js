@@ -2,13 +2,20 @@ import { tool } from 'ai';
 import { z } from 'zod';
 import type { AiAnalyticsToolsService } from './ai-analytics-tools.service';
 import type { AiAdminToolsService } from './ai-admin-tools.service';
+import type { AiExplorationToolsService } from './ai-exploration-tools.service';
 import {
   ANALYTICS_AGGREGATIONS,
   ANALYTICS_GRANULARITIES,
   OUTLIER_METHODS,
 } from './ai-analytics.types';
 import type { AiChartSpec } from './ai-chart-spec.schema';
+import type { AiTableSpec } from './ai-table-spec.schema';
 import type { AiReportToolsService } from './ai-report-tools.service';
+import {
+  aiPlanProposalSchema,
+  type AiPlan,
+  type AiPlanProposal,
+} from './plan/ai-plan.schema';
 
 /**
  * Definições de tools compartilhadas entre o chat em streaming
@@ -46,6 +53,170 @@ export function buildReportToolSet(params: {
       }),
       execute: async ({ relatorioId, parametros }) =>
         reportTools.queryReport(userId, relatorioId, parametros ?? {}),
+    }),
+  };
+}
+
+/** Catálogo leve para a fase de planejamento (sem SQL pesado). */
+export function buildPlanningReportToolSet(params: {
+  reportTools: AiReportToolsService;
+  userId: number;
+}) {
+  const { reportTools, userId } = params;
+
+  return {
+    listarRelatoriosDisponiveis: tool({
+      description:
+        'Lista relatórios autorizados e a contagem. Retorna { total, relatorios (nomes), referenciaInterna }. Use o campo total para "quantos relatórios". Não verbalize IDs/estado ao usuário.',
+      inputSchema: z.object({}),
+      execute: async () => reportTools.listAvailableReports(userId),
+    }),
+    descreverRelatorio: tool({
+      description:
+        'Retorna metadados de um relatório (nome, colunas, parâmetros, estado). Confirme nomes reais de colunas antes de montar o plano.',
+      inputSchema: z.object({
+        relatorioId: z.number().int().positive(),
+      }),
+      execute: async ({ relatorioId }) =>
+        reportTools.describeReport(userId, relatorioId),
+    }),
+  };
+}
+
+export function buildPlanProposalTool(params: {
+  onPropose: (proposal: AiPlanProposal) => AiPlan;
+  afterPropose?: (plan: AiPlan) => Promise<void>;
+  getExistingPlan?: () => AiPlan | null;
+}) {
+  return {
+    proporPlanoAnalise: tool({
+      description:
+        'OBRIGATÓRIA no modo analítico para qualquer pedido de análise. Cria o card interativo de plano (perguntas A/B/C/Outra + passos) no frontend. NÃO escreva o plano em texto — só chame esta tool. Inclua sempre uma opção com label "Outra" em cada pergunta. Chame UMA ÚNICA VEZ por pedido — não repita. Não execute a análise aqui.',
+      inputSchema: aiPlanProposalSchema,
+      execute: async (proposal) => {
+        const existing = params.getExistingPlan?.() ?? null;
+        if (existing) {
+          return {
+            status: existing.status,
+            planId: existing.id,
+            aviso:
+              'Plano já criado nesta resposta. Peça ao usuário para usar o card existente e aprovar — não crie outro plano.',
+            objetivo: existing.objetivo,
+            perguntas: existing.perguntas.length,
+            passos: existing.passos.length,
+          };
+        }
+
+        const plan = params.onPropose(proposal);
+        if (params.afterPropose) {
+          await params.afterPropose(plan);
+        }
+        return {
+          status: plan.status,
+          planId: plan.id,
+          aviso:
+            'Plano enviado ao card interativo. No texto da resposta diga só uma frase pedindo para o usuário responder o card e aprovar. NÃO repita o plano em markdown.',
+          objetivo: plan.objetivo,
+          perguntas: plan.perguntas.length,
+          passos: plan.passos.length,
+        };
+      },
+    }),
+  };
+}
+
+/**
+ * Tools de exploração SQL (snapshot DuckDB + conexão do relatório).
+ * Usadas na execução do plano (fila), não na fase de planejamento.
+ */
+export function buildExplorationToolSet(params: {
+  explorationTools: AiExplorationToolsService;
+  userId: number;
+  emitChart?: (spec: AiChartSpec) => void;
+  emitTable?: (spec: AiTableSpec) => void;
+}) {
+  const { explorationTools, userId, emitChart, emitTable } = params;
+
+  return {
+    garantirSnapshot: tool({
+      description:
+        'Garante que o relatório tem snapshot Parquet válido para análise. Se estiver ausente ou inválido, enfileira a geração e retorna status gerando. Chame antes de executarQuerySnapshot quando necessário.',
+      inputSchema: z.object({
+        relatorioId: z.number().int().positive(),
+      }),
+      execute: async ({ relatorioId }) =>
+        explorationTools.garantirSnapshot(userId, relatorioId),
+    }),
+    executarQuerySnapshot: tool({
+      description:
+        'Executa SQL SELECT read-only no snapshot Parquet do relatório via DuckDB. A tabela lógica chama-se "dados" (não use read_parquet nem caminhos de arquivo). Use para agregações, filtros e exploração livre. Se falhar por coluna/SQL, corrija e tente de novo.',
+      inputSchema: z.object({
+        relatorioId: z.number().int().positive(),
+        sql: z
+          .string()
+          .min(10)
+          .describe(
+            'SELECT/WITH usando a tabela "dados". Ex.: SELECT col, count(*) FROM dados GROUP BY 1',
+          ),
+      }),
+      execute: async ({ relatorioId, sql }) =>
+        explorationTools.executarQuerySnapshot(userId, relatorioId, sql),
+    }),
+    executarQueryConexao: tool({
+      description:
+        'Executa SQL SELECT read-only na conexão de banco do relatório autorizado (preview limitado). Use quando precisar validar dados ao vivo ou o snapshot não bastar. Não invente tabelas — use nomes reais do schema quando souber.',
+      inputSchema: z.object({
+        relatorioId: z.number().int().positive(),
+        sql: z.string().min(10).describe('Somente SELECT/WITH, um statement.'),
+      }),
+      execute: async ({ relatorioId, sql }) =>
+        explorationTools.executarQueryConexao(userId, relatorioId, sql),
+    }),
+    visualizarDados: tool({
+      description:
+        'Executa SQL no snapshot e gera um gráfico interativo no chat (data-chart). Use para visualizar agregações (NPS por mês, tendências, comparações). Retorna apenas resumo — os pontos do gráfico não entram no contexto. Prefira esta tool em vez de tabelas markdown quando o plano pedir visualização.',
+      inputSchema: z.object({
+        relatorioId: z.number().int().positive(),
+        sql: z
+          .string()
+          .min(10)
+          .describe('SELECT/WITH na tabela "dados".'),
+        titulo: z.string().min(3).max(160),
+        subtitle: z.string().max(240).optional(),
+        tipoGrafico: z
+          .enum(['line', 'bar', 'area', 'scatter', 'auto'])
+          .optional()
+          .describe('Padrão: auto (infere pelo tipo das colunas).'),
+        colunaX: z.string().min(1).max(60).optional(),
+        series: z.array(z.string().min(1).max(60)).max(6).optional(),
+      }),
+      execute: async (input) => {
+        const result = await explorationTools.visualizarDados(userId, input);
+        if (result.chartSpec && emitChart) {
+          emitChart(result.chartSpec);
+        }
+        return result.resumo;
+      },
+    }),
+    publicarTabela: tool({
+      description:
+        'Executa SQL no snapshot e publica uma tabela interativa no chat (data-table). Use para dados tabulares detalhados. PROIBIDO reproduzir os mesmos dados em markdown — use esta tool.',
+      inputSchema: z.object({
+        relatorioId: z.number().int().positive(),
+        sql: z
+          .string()
+          .min(10)
+          .describe('SELECT/WITH na tabela "dados".'),
+        titulo: z.string().min(3).max(160),
+        subtitle: z.string().max(240).optional(),
+      }),
+      execute: async (input) => {
+        const result = await explorationTools.publicarTabela(userId, input);
+        if (result.tableSpec && emitTable) {
+          emitTable(result.tableSpec);
+        }
+        return result.resumo;
+      },
     }),
   };
 }

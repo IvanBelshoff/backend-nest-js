@@ -55,6 +55,20 @@ Relatórios offline materializam o resultado da query em arquivos **Parquet** no
 | `SNAPSHOT_TTL_HOURS` | TTL para limpeza de Parquet órfãos |
 | `DUCKDB_MAX_CONCURRENCY` | Consultas DuckDB simultâneas |
 | `DUCKDB_QUERY_TIMEOUT_MS` | Timeout por consulta DuckDB |
+| `AI_ANALYSIS_MAX_STEPS` | Passos do agente na fila (default 25) |
+| `AI_SNAPSHOT_QUERY_MAX_ROWS` | Limite de linhas SQL ad-hoc no snapshot |
+| `AI_DB_QUERY_MAX_ROWS` | Limite de linhas SQL ad-hoc na conexão |
+| `AI_DB_QUERY_TIMEOUT_MS` | Timeout SQL ad-hoc na conexão |
+
+### Modo Analítico (planos)
+
+No chat (`mode=analitico`), a IA propõe um plano (`proporPlanoAnalise`) com perguntas A/B/C/Outra e passos. O usuário edita/aprova via:
+
+- `PATCH /ai/threads/:threadId/plans/:planId`
+- `POST /ai/threads/:threadId/plans/:planId/approve`
+- `POST /ai/threads/:threadId/plans/:planId/cancel`
+
+A execução roda na fila `AI_ANALYSIS_QUEUE` com tools de exploração (`garantirSnapshot`, `executarQuerySnapshot`, `executarQueryConexao`) e atalhos analíticos, em loop até concluir ou esgotar steps.
 
 ### Leitura paginada
 

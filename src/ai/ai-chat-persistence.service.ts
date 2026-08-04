@@ -302,15 +302,13 @@ export class AiChatPersistenceService {
       lines.push(
         '',
         'MODO ANALÍTICO ATIVO — atue como analista de dados sênior.',
-        '- Objetivo: gerar insight, não apenas repetir números. Estruture a resposta em: (1) resposta direta à pergunta, (2) evidências numéricas com a fonte, (3) o que isso significa e o que fazer a seguir.',
-        '- Todo número deve vir de ferramenta analítica (tendência, correlação, outliers, distribuição, comparação de períodos) ou de consulta de relatório. PROIBIDO estimar, arredondar de cabeça ou inferir valores que você não obteve.',
-        '- Se a pergunta for ambígua quanto a relatório, coluna, métrica ou período, faça 1 ou 2 perguntas curtas de esclarecimento ANTES de rodar a análise. Se o contexto já for suficiente, execute direto sem perguntar.',
-        '- Quando a ferramenta analítica retornar um gráfico, ele é renderizado automaticamente na conversa: comente o que o gráfico mostra, mas não descreva eixos ponto a ponto nem tente desenhar gráficos em texto/ASCII/markdown.',
-        '- Para gráficos sobre usuários do sistema (ex.: distribuição por tipo de regra), use a ferramenta graficoUsuariosPorRegra — não substitua por tabela ou descrição textual do gráfico.',
-        '- Sempre informe a fonte dos dados (relatório de origem ou domínio Usuários) e o período analisado quando aplicável.',
-        '- Aponte limitações quando existirem: amostra pequena, snapshot possivelmente desatualizado, sazonalidade não controlada. Correlação não implica causalidade — nunca afirme causa sem evidência.',
-        '- Análises pesadas (vários relatórios, várias métricas combinadas, histórico longo, muitas etapas) devem ir para a fila de análise em segundo plano: chame a ferramenta de agendamento e avise ao usuário que ele pode continuar navegando e será notificado. Uma estatística única e simples deve ser rodada na hora, sem fila.',
-        '- Não invente colunas: confirme os nomes reais via metadados do relatório antes de analisar.',
+        '- Nesta fase você NÃO executa a análise. OBRIGATÓRIO chamar a ferramenta proporPlanoAnalise (não descreva o plano em markdown/texto).',
+        '- O card interativo no frontend renderiza objetivo, perguntas A/B/C/Outra e passos a partir da tool — se você escrever o plano no chat, o usuário NÃO consegue selecionar opções.',
+        '- Fluxo: (1) se precisar, descreverRelatorio para confirmar colunas; (2) chame proporPlanoAnalise UMA ÚNICA VEZ com objetivo, perguntas (IDs únicos por pergunta, opções A/B/C e sempre "Outra") e passos; (3) no texto diga APENAS uma frase curta pedindo para responder o card e aprovar.',
+        '- PROIBIDO: listar perguntas/passos no texto, inventar IDs de plano, ASCII/markdown de plano, ou fazer perguntas soltas no chat.',
+        '- Pedidos simples ainda geram um plano curto via a mesma tool (1 pergunta + 1–3 passos).',
+        '- Se o usuário pedir gráficos, dashboards ou visualizações, inclua um passo explícito de visualização (ex.: "Gerar gráficos de tendência e tabela interativa").',
+        '- Todo número na execução virá de ferramentas. PROIBIDO estimar. Correlação ≠ causalidade.',
       );
     }
 
@@ -353,5 +351,13 @@ export class AiChatPersistenceService {
     }
 
     return thread;
+  }
+
+  /** Exposto para serviços de plano / jobs que precisam validar dono do thread. */
+  async assertThreadOwnershipPublic(
+    userId: number,
+    threadId: string,
+  ): Promise<AiChatThread> {
+    return this.assertThreadOwnership(userId, threadId);
   }
 }

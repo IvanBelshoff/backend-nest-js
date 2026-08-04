@@ -8,6 +8,8 @@ import { z } from 'zod';
  */
 export const aiChartTypeSchema = z.enum(['line', 'bar', 'area', 'scatter']);
 
+export type AiChartType = z.infer<typeof aiChartTypeSchema>;
+
 export const aiChartAxisTypeSchema = z.enum(['category', 'number', 'time']);
 
 export const aiChartSeriesSchema = z
